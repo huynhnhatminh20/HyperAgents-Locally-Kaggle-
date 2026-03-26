@@ -1,0 +1,4 @@
+# Requirements for running HyperAgents with MLX on Apple Silicon Macs
+# Install: pip install -r requirements_mlx.txt
+-r requirements_local.txt
+mlx-lm>=0.22.0

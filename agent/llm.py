@@ -18,6 +18,13 @@ OLLAMA_MISTRAL = "ollama/mistral"
 OLLAMA_DEEPSEEK = "ollama/deepseek-coder-v2"
 OLLAMA_QWEN = "ollama/qwen2.5-coder"
 
+# --- MLX (Apple Silicon local) models ---
+# Use "mlx/<model-name-or-path>" to run models locally via mlx-lm on Mac.
+# The part after "mlx/" is passed directly to mlx_lm.load() — it can be a
+# HuggingFace repo ID or a local path to a downloaded MLX model.
+MLX_MODEL_PATH = os.environ.get("MLX_MODEL_PATH", "")  # optional local path override
+MLX_QWEN_OPUS = "mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit"
+
 # --- Cloud models (original) ---
 CLAUDE_MODEL = "anthropic/claude-sonnet-4-5-20250929"
 CLAUDE_HAIKU_MODEL = "anthropic/claude-3-haiku-20240307"
@@ -38,6 +45,58 @@ GEMINI_FLASH_MODEL = "gemini/gemini-2.5-flash"
 DEFAULT_MODEL = os.environ.get("MODEL_NAME", OLLAMA_LLAMA)
 
 litellm.drop_params=True
+
+
+# ---------------------------------------------------------------------------
+# MLX helper — lazily loaded so mlx-lm is only required when using mlx/ models
+# ---------------------------------------------------------------------------
+_mlx_model_cache = {}  # cache loaded model+tokenizer by path
+
+
+def _get_mlx_response(messages, model_id, max_tokens, temperature):
+    """Generate a response using mlx-lm (Apple Silicon only)."""
+    try:
+        from mlx_lm import load, generate
+    except ImportError:
+        raise ImportError(
+            "mlx-lm is required for MLX models. Install it with: "
+            "pip install mlx-lm"
+        )
+
+    # Resolve model path: env override, local path, or HuggingFace repo
+    model_name = model_id.removeprefix("mlx/")
+    model_path = MLX_MODEL_PATH or model_name
+
+    # Cache model + tokenizer across calls for performance
+    if model_path not in _mlx_model_cache:
+        print(f"  [MLX] Loading model from {model_path} …")
+        _mlx_model_cache[model_path] = load(model_path)
+
+    model_obj, tokenizer = _mlx_model_cache[model_path]
+
+    # Build chat prompt via the tokenizer's chat template
+    chat_kwargs = dict(
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    # Enable thinking/reasoning if the tokenizer supports it
+    try:
+        prompt = tokenizer.apply_chat_template(
+            messages, **chat_kwargs, enable_thinking=True
+        )
+    except TypeError:
+        prompt = tokenizer.apply_chat_template(messages, **chat_kwargs)
+
+    response_text = generate(
+        model_obj,
+        tokenizer,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        temp=temperature,
+        verbose=True,
+    )
+    return response_text
+
 
 @backoff.on_exception(
     backoff.expo,
@@ -63,6 +122,21 @@ def get_response_from_llm(
 
     new_msg_history = msg_history + [{"role": "user", "content": msg}]
 
+    # ----- MLX path (Apple Silicon local inference) -----
+    if model.startswith("mlx/"):
+        response_text = _get_mlx_response(
+            new_msg_history, model, max_tokens=min(max_tokens, 4096),
+            temperature=temperature,
+        )
+        new_msg_history.append({"role": "assistant", "content": response_text})
+        # Convert content→text for MetaGen API compatibility
+        new_msg_history = [
+            {**m, "text": m.pop("content")} if "content" in m else m
+            for m in new_msg_history
+        ]
+        return response_text, new_msg_history, {}
+
+    # ----- litellm path (Ollama / Cloud) -----
     # Build kwargs - handle model-specific requirements
     completion_kwargs = {
         "model": model,
@@ -122,6 +196,7 @@ if __name__ == "__main__":
     #     ("OLLAMA_CODELLAMA", OLLAMA_CODELLAMA),
     #     ("CLAUDE_MODEL", CLAUDE_MODEL),
     #     ("OPENAI_MODEL", OPENAI_MODEL),
+    #     ("MLX_QWEN_OPUS", MLX_QWEN_OPUS),
     # ]
     # for name, model in models:
     #     print(f"\n{'='*50}")
