@@ -15,7 +15,7 @@ HyperAgents is a framework where AI agents **improve themselves**:
 3. The modified agent is evaluated, and the best variants survive
 4. Repeat — the agents evolve and get better over time
 
-This fork adds **local Ollama support** so you can run the entire loop on your own machine.
+This fork adds **local Ollama support** and **MLX support for Apple Silicon Macs** so you can run the entire loop on your own machine.
 
 ## Quick Start
 
@@ -95,7 +95,35 @@ python generate_loop_local.py --output-dir ./my_experiments
 python agent/llm.py
 ```
 
+### MLX Models (Apple Silicon Macs)
+
+Run models natively on your Mac's GPU using [mlx-lm](https://github.com/ml-explore/mlx-examples/tree/main/llms) — no Ollama required.
+
+```bash
+# Install MLX dependencies
+pip install -r requirements_mlx.txt
+
+# Run with an MLX model (downloads from HuggingFace on first use)
+python generate_loop_local.py --domain text_classify \
+  --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit
+
+# Or use any HuggingFace MLX model repo
+python generate_loop_local.py --domain text_classify \
+  --model mlx/mlx-community/Llama-3.2-3B-Instruct-4bit
+
+# Use a local model path via environment variable
+export MLX_MODEL_PATH=/path/to/your/local/mlx-model
+python generate_loop_local.py --domain text_classify --model mlx/my-model
+
+# Test MLX connection
+python agent/llm.py
+```
+
+> **Note:** MLX models use the `mlx/` prefix. The part after `mlx/` is passed directly to `mlx_lm.load()` — it can be a HuggingFace repo ID or a local path.
+
 ## Supported Models
+
+### Ollama
 
 | Model | Best For | Size |
 |-------|----------|------|
@@ -105,7 +133,14 @@ python agent/llm.py
 | `ollama/qwen2.5-coder` | Code + reasoning | 7B |
 | `ollama/mistral` | Fast general use | 7B |
 
-> **Tip:** Larger models produce better self-improvements but run slower. Start with `llama3.2` to verify setup, then scale up.
+### MLX (Apple Silicon only)
+
+| Model | Best For | Size |
+|-------|----------|------|
+| `mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit` | Code + reasoning (Claude distilled) | 27B 4-bit |
+| `mlx/mlx-community/Llama-3.2-3B-Instruct-4bit` | Fast general purpose | 3B 4-bit |
+
+> **Tip:** Larger models produce better self-improvements but run slower. Start with a small model to verify setup, then scale up.
 
 ## Configuration
 
@@ -115,6 +150,10 @@ Copy `.env.example` to `.env` and adjust:
 OLLAMA_BASE_URL=http://localhost:11434  # Ollama server URL
 MODEL_NAME=ollama/llama3.2              # Default model
 MAX_TOKENS=4096                         # Token limit (adjust for model)
+
+# MLX models (Apple Silicon)
+# MODEL_NAME=mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit
+# MLX_MODEL_PATH=/path/to/local/model  # Optional: override with local path
 ```
 
 ## Cloud APIs (Optional)
@@ -152,6 +191,7 @@ python generate_loop.py --domains paper_review
 │   ├── search_arena/         # Search quality
 │   └── ...
 ├── requirements_local.txt    # 🆕 Minimal local dependencies
+├── requirements_mlx.txt      # 🆕 MLX dependencies (Apple Silicon)
 ├── setup_local.sh            # 🆕 Local setup script
 └── .env.example              # 🆕 Environment template
 ```
