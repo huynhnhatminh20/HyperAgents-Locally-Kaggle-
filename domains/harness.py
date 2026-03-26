@@ -17,6 +17,17 @@ from types import ModuleType
 
 def get_dataset(domain, subset=""):
     df = None
+    if domain == "text_classify":
+        from domains.text_classify.dataset import get_split
+        # Map subset strings like "_filtered_100_train" -> "train"
+        split = "train"
+        for s in ["train", "val", "test"]:
+            if s in subset:
+                split = s
+                break
+        data = get_split(split)
+        df = pd.DataFrame(data)
+        return df
     if "imo_" in domain:
         df = pd.read_csv(f"./domains/imo/{domain.split('_')[-1]}bench{subset}.csv", dtype=str)
     elif domain in ["search_arena", "paper_review"]:
@@ -188,6 +199,7 @@ if __name__ == "__main__":
             "imo_grading",
             "imo_proof",
             "imo_proof_grading",  # To grade generated proofs with an agent
+            "text_classify",
         ],
         required=True,
         help="Domain to evaluate",
@@ -224,7 +236,7 @@ if __name__ == "__main__":
         parser.error("--proofs_dname is required when domain is 'imo_proof_grading'")
 
     # Human preferences domains
-    if domain in ["search_arena", "paper_review", "imo_grading", "imo_proof", "imo_proof_grading"]:
+    if domain in ["search_arena", "paper_review", "imo_grading", "imo_proof", "imo_proof_grading", "text_classify"]:
         output_folder = harness(
             agent_path=args.agent_path,
             output_dir=args.output_dir,

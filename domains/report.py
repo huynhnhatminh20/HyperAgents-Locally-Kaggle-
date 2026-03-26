@@ -174,6 +174,7 @@ if __name__ == "__main__":
             "genesis_go2hop",
             "imo_grading",
             "imo_proof",
+            "text_classify",
         ],
         required=True,
         help="Domain to evaluate",
@@ -184,7 +185,7 @@ if __name__ == "__main__":
     domain = args.domain
 
     # Human preferences domains
-    if domain in ["search_arena", "paper_review", "imo_grading"]:
+    if domain in ["search_arena", "paper_review", "imo_grading", "text_classify"]:
         report(dname=args.dname, domain=args.domain)
 
     elif domain == "imo_proof":

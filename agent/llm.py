@@ -8,8 +8,17 @@ import json
 
 load_dotenv()
 
-MAX_TOKENS = 16384
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096"))
 
+# --- Ollama (local) models ---
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_LLAMA = "ollama/llama3.2"
+OLLAMA_CODELLAMA = "ollama/codellama"
+OLLAMA_MISTRAL = "ollama/mistral"
+OLLAMA_DEEPSEEK = "ollama/deepseek-coder-v2"
+OLLAMA_QWEN = "ollama/qwen2.5-coder"
+
+# --- Cloud models (original) ---
 CLAUDE_MODEL = "anthropic/claude-sonnet-4-5-20250929"
 CLAUDE_HAIKU_MODEL = "anthropic/claude-3-haiku-20240307"
 CLAUDE_35NEW_MODEL = "anthropic/claude-3-5-sonnet-20241022"
@@ -24,6 +33,9 @@ OPENAI_GPT5MINI_MODEL = "openai/gpt-5-mini"
 GEMINI_3_MODEL = "gemini/gemini-3-pro-preview"
 GEMINI_MODEL = "gemini/gemini-2.5-pro"
 GEMINI_FLASH_MODEL = "gemini/gemini-2.5-flash"
+
+# --- Default model (configurable via env) ---
+DEFAULT_MODEL = os.environ.get("MODEL_NAME", OLLAMA_LLAMA)
 
 litellm.drop_params=True
 
@@ -57,6 +69,10 @@ def get_response_from_llm(
         "messages": new_msg_history,
     }
 
+    # Set api_base for Ollama models
+    if model.startswith("ollama/") or model.startswith("ollama_chat/"):
+        completion_kwargs["api_base"] = OLLAMA_BASE_URL
+
     # GPT-5 and GPT-5-mini only support default temperature (1), skip it
     # GPT-5.2 supports temperature
     if model in ["openai/gpt-5", "openai/gpt-5-mini"]:
@@ -67,6 +83,8 @@ def get_response_from_llm(
     # GPT-5 models require max_completion_tokens instead of max_tokens
     if "gpt-5" in model:
         completion_kwargs["max_completion_tokens"] = max_tokens
+    elif model.startswith("ollama/") or model.startswith("ollama_chat/"):
+        completion_kwargs["max_tokens"] = min(max_tokens, 4096)
     else:
         # Claude Haiku has a 4096 token limit
         if "claude-3-haiku" in model:
@@ -89,28 +107,28 @@ def get_response_from_llm(
 
 if __name__ == "__main__":
     msg = 'Hello there!'
-    models = [
-        ("CLAUDE_MODEL", CLAUDE_MODEL),
-        ("CLAUDE_HAIKU_MODEL", CLAUDE_HAIKU_MODEL),
-        ("CLAUDE_35NEW_MODEL", CLAUDE_35NEW_MODEL),
-        ("OPENAI_MODEL", OPENAI_MODEL),
-        ("OPENAI_MINI_MODEL", OPENAI_MINI_MODEL),
-        ("OPENAI_O3_MODEL", OPENAI_O3_MODEL),
-        ("OPENAI_O3MINI_MODEL", OPENAI_O3MINI_MODEL),
-        ("OPENAI_O4MINI_MODEL", OPENAI_O4MINI_MODEL),
-        ("OPENAI_GPT52_MODEL", OPENAI_GPT52_MODEL),
-        ("OPENAI_GPT5_MODEL", OPENAI_GPT5_MODEL),
-        ("OPENAI_GPT5MINI_MODEL", OPENAI_GPT5MINI_MODEL),
-        ("GEMINI_3_MODEL", GEMINI_3_MODEL),
-        ("GEMINI_MODEL", GEMINI_MODEL),
-        ("GEMINI_FLASH_MODEL", GEMINI_FLASH_MODEL),
-    ]
-    for name, model in models:
-        print(f"\n{'='*50}")
-        print(f"Testing {name}: {model}")
-        print('='*50)
-        try:
-            output_msg, msg_history, info = get_response_from_llm(msg, model=model)
-            print(f"OK: {output_msg[:100]}...")
-        except Exception as e:
-            print(f"FAIL: {str(e)[:200]}")
+    # Test the default model (Ollama by default)
+    print(f"Testing DEFAULT_MODEL: {DEFAULT_MODEL}")
+    try:
+        output_msg, msg_history, info = get_response_from_llm(msg, model=DEFAULT_MODEL)
+        print(f"OK: {output_msg[:200]}...")
+    except Exception as e:
+        print(f"FAIL: {str(e)[:300]}")
+
+    # Uncomment to test all models:
+    # models = [
+    #     ("OLLAMA_LLAMA", OLLAMA_LLAMA),
+    #     ("OLLAMA_MISTRAL", OLLAMA_MISTRAL),
+    #     ("OLLAMA_CODELLAMA", OLLAMA_CODELLAMA),
+    #     ("CLAUDE_MODEL", CLAUDE_MODEL),
+    #     ("OPENAI_MODEL", OPENAI_MODEL),
+    # ]
+    # for name, model in models:
+    #     print(f"\n{'='*50}")
+    #     print(f"Testing {name}: {model}")
+    #     print('='*50)
+    #     try:
+    #         output_msg, msg_history, info = get_response_from_llm(msg, model=model)
+    #         print(f"OK: {output_msg[:100]}...")
+    #     except Exception as e:
+    #         print(f"FAIL: {str(e)[:200]}")

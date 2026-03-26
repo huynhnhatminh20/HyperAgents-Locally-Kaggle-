@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from agent.llm import OPENAI_MODEL
+from agent.llm import DEFAULT_MODEL
 from utils.thread_logger import ThreadLoggerManager
 
 
 class AgentSystem(ABC):
     def __init__(
         self,
-        model=OPENAI_MODEL,
+        model=DEFAULT_MODEL,
         chat_history_file='./outputs/chat_history.md',
     ):
         self.model = model

@@ -1,94 +1,196 @@
-<div align="center">
+# 🧬 HyperAgents-Ollama
 
-<!-- Logo/Banner placeholder - uncomment and add your image -->
-<!-- <img src="assets/banner.png" alt="HyperAgents Banner" width="800"> -->
+**Self-Improving AI Agents with Local Models**
 
-<h1>HyperAgents</h1>
+A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/HyperAgents) that runs entirely locally using [Ollama](https://ollama.ai) — no cloud API keys required.
 
-<p>Self-referential self-improving agents that can optimize for any computable task</p>
+> **Paper:** [Hyperagents](https://arxiv.org/abs/2603.19461) — Self-referential agents that integrate a task agent and a meta agent into a single editable program, enabling metacognitive self-modification.
 
-<p>
-<a href="LICENSE.md"><img src="https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg?style=for-the-badge" alt="License: CC BY-NC-SA 4.0"></a>
-<a href="https://arxiv.org/abs/2603.19461"><img src="https://img.shields.io/badge/arXiv-2603.19461-b31b1b.svg?style=for-the-badge&logo=arxiv" alt="arXiv"></a>
-<a href="https://ai.meta.com/research/publications/hyperagents/"><img src="https://img.shields.io/badge/-Blog-%238D6748?style=for-the-badge&logo=Website&logoColor=white"></a>
-<a href="https://x.com/jennyzhangzt/status/2036099935083618487"><img src="https://img.shields.io/badge/twitter-%230077B5.svg?&style=for-the-badge&logo=twitter&logoColor=white&color=00acee"></a>
-</p>
+## What is this?
 
----
+HyperAgents is a framework where AI agents **improve themselves**:
 
-</div>
+1. A **Task Agent** solves a given problem
+2. A **Meta Agent** modifies the Task Agent's code to make it better
+3. The modified agent is evaluated, and the best variants survive
+4. Repeat — the agents evolve and get better over time
 
-## Setup
+This fork adds **local Ollama support** so you can run the entire loop on your own machine.
+
+## Quick Start
+
+### 1. Install Ollama
+
 ```bash
-# API keys, put these into .env file
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
+# macOS
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Start the server
+ollama serve
+```
+
+### 2. Pull a Model
+
+```bash
+ollama pull llama3.2          # Good general-purpose (3B)
+ollama pull codellama          # Better for code tasks
+ollama pull deepseek-coder-v2  # Strong coding model
+ollama pull qwen2.5-coder      # Great coding model
+ollama pull mistral            # Fast and capable
+```
+
+### 3. Setup & Run
+
+```bash
+git clone https://github.com/quantumnic/HyperAgents-Ollama.git
+cd HyperAgents-Ollama
+
+# Automated setup
+bash setup_local.sh
+
+# Or manual:
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements_local.txt
+cp .env.example .env
+
+# Run the self-improvement loop!
+python generate_loop_local.py --domain text_classify --model ollama/llama3.2
+```
+
+### 4. Watch it evolve 🧬
+
+```
+============================================================
+HyperAgents Local Loop
+  Model:      ollama/llama3.2
+  Domain:     text_classify
+  Gens:       5
+============================================================
+
+Generation 1/5 — Score: 0.650 | Parent: initial
+Generation 2/5 — Score: 0.700 | Parent: 1
+Generation 3/5 — Score: 0.750 | Parent: 2 ⭐
+...
+```
+
+## Usage
+
+```bash
+# Basic run with text classification demo
+python generate_loop_local.py --domain text_classify
+
+# Use a specific model
+python generate_loop_local.py --model ollama/codellama --domain text_classify
+
+# More generations
+python generate_loop_local.py --max-generation 10
+
+# Custom output directory
+python generate_loop_local.py --output-dir ./my_experiments
+
+# Test your LLM connection
+python agent/llm.py
+```
+
+## Supported Models
+
+| Model | Best For | Size |
+|-------|----------|------|
+| `ollama/llama3.2` | General purpose | 3B |
+| `ollama/codellama` | Code generation | 7B |
+| `ollama/deepseek-coder-v2` | Strong coding | 16B |
+| `ollama/qwen2.5-coder` | Code + reasoning | 7B |
+| `ollama/mistral` | Fast general use | 7B |
+
+> **Tip:** Larger models produce better self-improvements but run slower. Start with `llama3.2` to verify setup, then scale up.
+
+## Configuration
+
+Copy `.env.example` to `.env` and adjust:
+
+```bash
+OLLAMA_BASE_URL=http://localhost:11434  # Ollama server URL
+MODEL_NAME=ollama/llama3.2              # Default model
+MAX_TOKENS=4096                         # Token limit (adjust for model)
+```
+
+## Cloud APIs (Optional)
+
+You can still use cloud APIs by setting the appropriate keys in `.env`:
+
+```bash
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
 GEMINI_API_KEY=...
+MODEL_NAME=openai/gpt-4o  # or anthropic/claude-3-5-sonnet-20241022
 ```
 
+Then run with the Docker-based loop:
 ```bash
-# Install things
-sudo dnf install -y python3.12-devel
-sudo dnf install -y graphviz graphviz-devel cmake ninja-build bzip2-devel zlib-devel ncurses-devel libffi-devel
-```
-
-```bash
-# Create virtual environment
-python3.12 -m venv venv_nat
-source venv_nat/bin/activate
 pip install -r requirements.txt
-pip install -r requirements_dev.txt
-# To build the docker container
-docker build --network=host -t hyperagents .
+docker build -t hyperagents .
+python generate_loop.py --domains paper_review
 ```
 
-```bash
-# Setup initial agents
-bash ./setup_initial.sh
+## Project Structure
+
+```
+├── generate_loop_local.py   # 🆕 Docker-free local runner
+├── generate_loop.py         # Original Docker-based runner
+├── agent/
+│   ├── llm.py               # LLM interface (Ollama + cloud)
+│   ├── base_agent.py        # Base agent class
+│   └── llm_withtools.py     # Tool-using agent
+├── meta_agent.py            # Self-modification agent
+├── task_agent.py             # Task-solving agent
+├── domains/
+│   ├── text_classify/        # 🆕 Simple demo domain
+│   ├── paper_review/         # Academic paper review
+│   ├── search_arena/         # Search quality
+│   └── ...
+├── requirements_local.txt    # 🆕 Minimal local dependencies
+├── setup_local.sh            # 🆕 Local setup script
+└── .env.example              # 🆕 Environment template
 ```
 
-## Running HyperAgents
+## How It Works
 
-```bash
-# See the script for args, and baseline selections
-python generate_loop.py --domains <domain>
+```
+┌─────────────────────────────────────────────┐
+│              Generation Loop                │
+│                                             │
+│  1. Select parent from archive              │
+│  2. Meta Agent modifies Task Agent code     │
+│  3. Evaluate modified Task Agent            │
+│  4. Store result → archive                  │
+│  5. Repeat                                  │
+│                                             │
+│  ┌──────────┐    modifies    ┌───────────┐  │
+│  │Meta Agent│───────────────▶│Task Agent │  │
+│  │          │                │           │  │
+│  │(improves │   ┌────────┐  │ (solves   │  │
+│  │ itself!) │◀──│Archive │──│  tasks)   │  │
+│  └──────────┘   └────────┘  └───────────┘  │
+└─────────────────────────────────────────────┘
 ```
 
-By default, outputs will be saved in `outputs/` directory.
+## Citation
 
-## File Structure
-- `agent/` code for using foundation models
-- `analysis/` scripts used for plotting and analysis
-- `domains/` code for each domain
-- `utils/` common code used in the repo
-- `run_meta_agent.py` script to help run the meta agent and get the diffs
-- `meta_agent.py` main implementation of the meta agent
-- `task_agent.py` main implementation of the task agent
-- `generate_loop.py` entry point for running the algorithm
-
-## Logs from Experiments
-
-The experiment logs are stored as a multi-part ZIP archive. To extract them, ensure all .z01, .z02, etc., files are in the same directory as the .zip file, then run:
-```bash
-zip -s 0 outputs_os_parts.zip --out unsplit_logs.zip
-unzip unsplit_outputs.zip
-```
-
-## Safety Consideration
-> [!WARNING]  
-> This repository involves executing untrusted, model-generated code. We strongly advise users to be aware of the associated safety risks. While it is highly unlikely that such code will perform overtly malicious actions under our current settings and with the models we use, it may still behave destructively due to limitations in model capability or alignment. By using this repository, you acknowledge and accept these risks.
-
-## Citing
-If you find this project useful, please consider citing:
 ```bibtex
 @misc{zhang2026hyperagents,
-      title={Hyperagents}, 
-      author={Jenny Zhang and Bingchen Zhao and Wannan Yang and Jakob Foerster and Jeff Clune and Minqi Jiang and Sam Devlin and Tatiana Shavrina},
-      year={2026},
-      eprint={2603.19461},
-      archivePrefix={arXiv},
-      primaryClass={cs.AI},
-      url={https://arxiv.org/abs/2603.19461}, 
+  title={Hyperagents},
+  author={Jenny Zhang and Bingchen Zhao and Wannan Yang and Jakob Foerster and Jeff Clune and Minqi Jiang and Sam Devlin and Tatiana Shavrina},
+  year={2026},
+  eprint={2603.19461},
+  archivePrefix={arXiv},
+  primaryClass={cs.AI},
+  url={https://arxiv.org/abs/2603.19461},
 }
 ```
 
+## License
+
+See [LICENSE.md](LICENSE.md) for the original Meta license.
