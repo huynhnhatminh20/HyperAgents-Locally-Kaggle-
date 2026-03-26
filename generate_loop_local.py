@@ -7,24 +7,52 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from datetime import datetime
 
 from utils.common import file_exist_and_not_empty, load_json_file
 
+# Global verbose flag
+VERBOSE = False
 
-def run_command(cmd, workdir=None, timeout=3600):
-    """Run a command as subprocess with timeout. Returns (exit_code, stdout, stderr)."""
-    print(f"  [CMD] {' '.join(cmd) if isinstance(cmd, list) else cmd}")
+
+def run_command(cmd, workdir=None, timeout=3600, stream=False):
+    """Run a command as subprocess with timeout. Returns (exit_code, stdout, stderr).
+
+    If stream=True (or VERBOSE is set), streams output in real-time instead of capturing.
+    """
+    cmd_str = ' '.join(cmd) if isinstance(cmd, list) else cmd
+    print(f"  [CMD] {cmd_str}")
+    should_stream = stream or VERBOSE
     try:
-        result = subprocess.run(
-            cmd, cwd=workdir, capture_output=True, text=True,
-            timeout=timeout, shell=isinstance(cmd, str),
-        )
-        if result.stdout.strip():
-            print(f"  [OUT] {result.stdout.strip()[:500]}")
-        if result.returncode != 0 and result.stderr.strip():
-            print(f"  [ERR] {result.stderr.strip()[:500]}")
-        return result.returncode, result.stdout, result.stderr
+        if should_stream:
+            # Stream output in real-time
+            process = subprocess.Popen(
+                cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, shell=isinstance(cmd, str), bufsize=1,
+            )
+            stdout_lines = []
+            start_time = time.time()
+            for line in process.stdout:
+                line = line.rstrip('\n')
+                stdout_lines.append(line)
+                print(f"  │ {line}")
+                if timeout and (time.time() - start_time) > timeout:
+                    process.kill()
+                    print(f"  [TIMEOUT] after {timeout}s")
+                    return -1, '\n'.join(stdout_lines), "timeout"
+            process.wait()
+            return process.returncode, '\n'.join(stdout_lines), ""
+        else:
+            result = subprocess.run(
+                cmd, cwd=workdir, capture_output=True, text=True,
+                timeout=timeout, shell=isinstance(cmd, str),
+            )
+            if result.stdout.strip():
+                print(f"  [OUT] {result.stdout.strip()[:500]}")
+            if result.returncode != 0 and result.stderr.strip():
+                print(f"  [ERR] {result.stderr.strip()[:500]}")
+            return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
         print(f"  [TIMEOUT] after {timeout}s")
         return -1, "", "timeout"
@@ -74,6 +102,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
     print(f"\n{'='*60}")
     print(f"Running initial evaluation on {domain}...")
     print(f"{'='*60}")
+    start_time = time.time()
 
     run_id = f"initial_{domain}{subset}_0"
     cmd = [
@@ -86,7 +115,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
         "--num_workers", "1",
         "--subset", subset,
     ]
-    run_command(cmd, workdir=project_dir, timeout=1800)
+    run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
 
     # Generate report
     eval_dir = os.path.join(output_dir, run_id)
@@ -97,14 +126,16 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
     ]
     run_command(cmd, workdir=project_dir, timeout=300)
 
+    elapsed = time.time() - start_time
     score = get_score_from_report(os.path.join(eval_dir, "report.json"))
-    print(f"  Initial score: {score}")
+    print(f"  Initial score: {score} ({elapsed:.1f}s)")
     return score
 
 
 def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, iterations_left=5):
     """Run the meta agent to produce modifications."""
     print(f"\n  Running meta agent (model={model})...")
+    start_time = time.time()
 
     agent_output_dir = os.path.join(output_dir, "agent_output")
     os.makedirs(agent_output_dir, exist_ok=True)
@@ -121,17 +152,38 @@ def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, it
         "--outdir", agent_output_dir,
         "--iterations_left", str(iterations_left),
     ]
-    code, _, _ = run_command(cmd, workdir=project_dir, timeout=3600)
+    # Always stream meta agent output so you can see what it's doing
+    code, _, _ = run_command(cmd, workdir=project_dir, timeout=3600, stream=True)
 
+    elapsed = time.time() - start_time
     patch_file = os.path.join(agent_output_dir, "model_patch.diff")
     success = code == 0 and file_exist_and_not_empty(patch_file)
-    print(f"  Meta agent {'succeeded' if success else 'failed'}, patch: {os.path.exists(patch_file)}")
+
+    # Show patch summary in verbose mode
+    status = "SUCCEEDED" if success else "FAILED"
+    print(f"  Meta agent {status} ({elapsed:.1f}s)")
+    if success and VERBOSE:
+        try:
+            with open(patch_file) as f:
+                patch_content = f.read()
+            lines_changed = len([l for l in patch_content.splitlines() if l.startswith('+') or l.startswith('-')])
+            print(f"  Patch: {lines_changed} lines changed")
+            print(f"  ┌─── patch preview ───")
+            for line in patch_content.splitlines()[:30]:
+                print(f"  │ {line}")
+            if patch_content.count('\n') > 30:
+                print(f"  │ ... ({patch_content.count(chr(10)) - 30} more lines)")
+            print(f"  └─────────────────────")
+        except Exception:
+            pass
+
     return success, patch_file
 
 
 def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, subset="_train"):
     """Evaluate the current task agent."""
     print(f"  Evaluating generation {gen_id}...")
+    start_time = time.time()
 
     run_id = f"{domain}_eval"
     eval_output_dir = os.path.join(output_dir, run_id)
@@ -147,7 +199,7 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
         "--num_workers", "1",
         "--subset", subset,
     ]
-    run_command(cmd, workdir=project_dir, timeout=1800)
+    run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
 
     # Generate report
     cmd = [
@@ -157,8 +209,9 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
     ]
     run_command(cmd, workdir=project_dir, timeout=300)
 
+    elapsed = time.time() - start_time
     score = get_score_from_report(os.path.join(eval_output_dir, "report.json"))
-    print(f"  Score for gen {gen_id}: {score}")
+    print(f"  Score for gen {gen_id}: {score} ({elapsed:.1f}s)")
     return score
 
 
@@ -190,8 +243,11 @@ def generate_loop_local(
     num_samples=-1,
     output_dir_parent=None,
     parent_selection="best",
+    verbose=False,
 ):
     """Main local generation loop — no Docker required."""
+    global VERBOSE
+    VERBOSE = verbose
 
     if model is None:
         from agent.llm import DEFAULT_MODEL
@@ -231,13 +287,21 @@ def generate_loop_local(
         f.write(json.dumps(archive[-1]) + "\n")
 
     # --- Generation loop ---
+    loop_start = time.time()
     for gen_id in range(1, max_generation + 1):
         print(f"\n{'='*60}")
         print(f"Generation {gen_id}/{max_generation}")
+        # Show score history so far
+        scores = [f"{('initial' if a['id'] == 'initial' else 'gen_' + str(a['id']))}: {a['score']}" for a in archive if a.get('score') is not None]
+        if scores:
+            print(f"  Score history: {' → '.join(scores)}")
+        best_so_far = max((a.get('score', 0) or 0 for a in archive), default=0)
+        print(f"  Best so far:  {best_so_far}")
         print(f"{'='*60}")
 
         parent_id = select_parent(archive, method=parent_selection)
-        print(f"  Parent: {parent_id}")
+        parent_score = next((a.get('score') for a in archive if a['id'] == parent_id), None)
+        print(f"  Parent: {parent_id} (score: {parent_score})")
 
         gen_output_dir = os.path.join(output_dir, f"gen_{gen_id}")
         os.makedirs(gen_output_dir, exist_ok=True)
@@ -299,7 +363,13 @@ def generate_loop_local(
         with open(os.path.join(gen_output_dir, "metadata.json"), "w") as f:
             json.dump(metadata, f, indent=2)
 
-        print(f"  Gen {gen_id} done — score: {score}, parent: {parent_id}")
+        # Show improvement indicator
+        if score is not None and parent_score is not None:
+            delta = score - parent_score
+            indicator = f"{'📈' if delta > 0 else '📉' if delta < 0 else '➡️'} {delta:+.4f}"
+        else:
+            indicator = "N/A"
+        print(f"  Gen {gen_id} done — score: {score}, parent: {parent_id}, change: {indicator}")
 
     # --- Final reset ---
     git_reset(project_dir, base_commit)
@@ -318,7 +388,9 @@ def generate_loop_local(
     if best:
         print(f"\n  Best: Gen {best['id']} with score {best['score']:.3f}")
 
-    print(f"\n  Output saved to: {output_dir}")
+    total_elapsed = time.time() - loop_start
+    print(f"\n  Total time: {total_elapsed/60:.1f} minutes")
+    print(f"  Output saved to: {output_dir}")
     return output_dir
 
 
@@ -338,6 +410,8 @@ if __name__ == "__main__":
     parser.add_argument("--parent-selection", type=str, default="best",
                         choices=["best", "latest", "proportional"],
                         help="Parent selection method")
+    parser.add_argument("--verbose", "-v", action="store_true",
+                        help="Verbose output: stream all subprocess output, show patch previews and detailed progress")
     args = parser.parse_args()
 
     generate_loop_local(
@@ -347,4 +421,5 @@ if __name__ == "__main__":
         num_samples=args.num_samples,
         output_dir_parent=args.output_dir,
         parent_selection=args.parent_selection,
+        verbose=args.verbose,
     )
