@@ -328,7 +328,7 @@ if __name__ == "__main__":
                         choices=["text_classify", "search_arena", "paper_review"],
                         help="Domain to optimize on")
     parser.add_argument("--model", type=str, default=None,
-                        help="Ollama model to use (e.g., ollama/llama3.2, ollama/mistral)")
+                        help="Model to use (e.g., ollama/llama3.2, mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit)")
     parser.add_argument("--max-generation", type=int, default=5,
                         help="Number of evolution generations")
     parser.add_argument("--num-samples", type=int, default=-1,
