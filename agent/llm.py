@@ -57,6 +57,7 @@ def _get_mlx_response(messages, model_id, max_tokens, temperature):
     """Generate a response using mlx-lm (Apple Silicon only)."""
     try:
         from mlx_lm import load, generate
+        from mlx_lm.sample_utils import make_sampler
     except ImportError:
         raise ImportError(
             "mlx-lm is required for MLX models. Install it with: "
@@ -87,12 +88,13 @@ def _get_mlx_response(messages, model_id, max_tokens, temperature):
     except TypeError:
         prompt = tokenizer.apply_chat_template(messages, **chat_kwargs)
 
+    sampler = make_sampler(temp=temperature)
     response_text = generate(
         model_obj,
         tokenizer,
         prompt=prompt,
         max_tokens=max_tokens,
-        temp=temperature,
+        sampler=sampler,
         verbose=True,
     )
     return response_text
