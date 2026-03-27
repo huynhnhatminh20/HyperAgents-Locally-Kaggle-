@@ -3,6 +3,19 @@ import git
 import subprocess
 
 
+IGNORED_DIFF_PATTERNS = (
+    "__pycache__/",
+    ".pyc",
+    ".pyo",
+    ".DS_Store",
+)
+
+
+def should_ignore_diff_path(path):
+    normalized_path = path.replace("\\", "/")
+    return any(pattern in normalized_path for pattern in IGNORED_DIFF_PATTERNS)
+
+
 def get_git_commit_hash(repo_path='.'):
     try:
         # Load the repository
@@ -50,6 +63,8 @@ def diff_versus_commit(git_dname, commit):
 
     # Generate diffs for untracked files
     for file in untracked_files:
+        if should_ignore_diff_path(file):
+            continue
         # Diff untracked file against /dev/null (empty file)
         file_path = os.path.join(git_dname, file)
         devnull = '/dev/null'
