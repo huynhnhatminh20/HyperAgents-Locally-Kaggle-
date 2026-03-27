@@ -1,165 +1,220 @@
-import asyncio
 import os
+import queue
+import shutil
+import subprocess
+import threading
+import time
+import uuid
+
 
 def tool_info():
+    shell_description = (
+        "Run commands in a persistent shell session. "
+        "Uses bash/sh on Unix-like systems and PowerShell or cmd on Windows."
+    )
     return {
         "name": "bash",
-        "description": """Run commands in a bash shell
+        "description": f"""{shell_description}
 * When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
 * You don't have access to the internet via this tool.
-* You do have access to a mirror of common linux and python packages via apt and pip.
 * State is persistent across command calls and discussions with the user.
-* To inspect a particular line range of a file, e.g. lines 10-25, try 'sed -n 10,25p /path/to/the/file'.
+* To inspect a particular line range of a file, use a shell command available on the current OS.
 * Please avoid commands that may produce a very large amount of output.
-* Please run long lived commands in the background, e.g. 'sleep 10 &' or start a server in the background.""",
+* Please run long lived commands in the background if the shell supports it.""",
         "input_schema": {
             "type": "object",
             "properties": {
                 "command": {
                     "type": "string",
-                    "description": "The bash command to run."
+                    "description": "The shell command to run."
                 }
             },
             "required": ["command"]
         }
     }
 
-class BashSession:
-    """A session of a bash shell."""
+
+class ShellSession:
+    """A persistent shell session with cross-platform shell selection."""
+
     def __init__(self):
         self._started = False
         self._process = None
-        self._timed_out = False
-        self._timeout = 120.0  # seconds
-        self._sentinel = "<<exit>>"
-        self._output_delay = 0.2  # seconds
+        self._reader_thread = None
+        self._queue = queue.Queue()
+        self._lock = threading.Lock()
+        self._timeout = 120.0
+        self._shell_kind = None
 
-    async def start(self):
+    def _detect_shell(self):
+        if os.name == "nt":
+            for shell_name in ("pwsh", "powershell"):
+                shell_path = shutil.which(shell_name)
+                if shell_path:
+                    return [shell_path, "-NoLogo", "-NoProfile", "-NoExit", "-Command", "-"], "powershell"
+            return [os.environ.get("COMSPEC", "cmd.exe"), "/Q", "/K"], "cmd"
+
+        shell_path = (
+            shutil.which("bash")
+            or os.environ.get("SHELL")
+            or shutil.which("sh")
+            or "/bin/sh"
+        )
+        return [shell_path], "posix"
+
+    def _reader_loop(self):
+        if self._process is None or self._process.stdout is None:
+            return
+
+        for line in iter(self._process.stdout.readline, ""):
+            self._queue.put(line)
+
+    def _drain_queue(self):
+        drained = []
+        while True:
+            try:
+                drained.append(self._queue.get_nowait())
+            except queue.Empty:
+                break
+        return drained
+
+    def _write_line(self, line):
+        if self._process is None or self._process.stdin is None:
+            raise ValueError("Shell session is not started.")
+        self._process.stdin.write(line + "\n")
+        self._process.stdin.flush()
+
+    def _initialize_shell(self):
+        if self._shell_kind == "powershell":
+            self._write_line("function prompt { '' }")
+            self._write_line("$ProgressPreference = 'SilentlyContinue'")
+        elif self._shell_kind == "cmd":
+            self._write_line("prompt")
+        else:
+            self._write_line("export PS1=''")
+
+        sentinel = f"<<shell-ready:{uuid.uuid4().hex}>>"
+        self._write_line(self._sentinel_command(sentinel))
+        self._wait_for_sentinel(sentinel)
+
+    def start(self):
         if self._started:
             return
-        self._process = await asyncio.create_subprocess_shell(
-            "/bin/bash -i",
-            preexec_fn=os.setsid,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=os.environ.copy()  # Ensures inheritance of the current environment
+
+        shell_cmd, self._shell_kind = self._detect_shell()
+        creationflags = 0
+        if os.name == "nt":
+            creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+
+        self._process = subprocess.Popen(
+            shell_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            env=os.environ.copy(),
+            creationflags=creationflags,
         )
+        self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
+        self._reader_thread.start()
         self._started = True
+        time.sleep(0.1)
+        self._drain_queue()
+        self._initialize_shell()
 
     def stop(self):
         if not self._started:
             return
-        if self._process.returncode is None:
+        if self._process is not None and self._process.poll() is None:
             self._process.terminate()
         self._process = None
         self._started = False
 
-    async def run(self, command):
-        if not self._started:
-            raise ValueError("Session has not started.")
-        if self._process.returncode is not None:
-            raise ValueError(f"Bash has exited with returncode {self._process.returncode}")
-        if self._timed_out:
-            raise ValueError(
-                f"Timed out: bash has not returned in {self._timeout} seconds and must be restarted."
-            )
-        
-        # Send command
-        self._process.stdin.write(
-            command.encode() + f"; echo '{self._sentinel}'\n".encode()
-        )
-        await self._process.stdin.drain()
+    def _sentinel_command(self, sentinel):
+        if self._shell_kind == "powershell":
+            return f"Write-Output '{sentinel}'"
+        if self._shell_kind == "cmd":
+            return f"echo {sentinel}"
+        return f"printf '{sentinel}\\n'"
 
-        # Read output until sentinel
-        try:
-            output = ''
-            start_time = asyncio.get_event_loop().time()
-            
-            while True:
-                if asyncio.get_event_loop().time() - start_time > self._timeout:
-                    self._timed_out = True
-                    raise ValueError(
-                        f"Timed out: bash has not returned in {self._timeout} seconds and must be restarted."
-                    )
-                
-                await asyncio.sleep(self._output_delay)
-                # Read from the internal buffer
-                stdout_data = self._process.stdout._buffer.decode(errors='ignore')
-                stderr_data = self._process.stderr._buffer.decode(errors='ignore')
-                
-                if self._sentinel in stdout_data:
-                    output = stdout_data[: stdout_data.index(self._sentinel)]
-                    break
+    def _wait_for_sentinel(self, sentinel):
+        lines = []
+        start_time = time.time()
 
-            # Clear buffers
-            self._process.stdout._buffer.clear()
-            self._process.stderr._buffer.clear()
+        while True:
+            elapsed = time.time() - start_time
+            if elapsed > self._timeout:
+                self.stop()
+                raise ValueError(
+                    f"Timed out: shell has not returned in {self._timeout} seconds and must be restarted."
+                )
 
-            output = output.strip()
-            error = stderr_data.strip()
+            try:
+                line = self._queue.get(timeout=min(0.5, self._timeout - elapsed))
+            except queue.Empty:
+                continue
 
-            return output, error
+            if sentinel in line:
+                before_sentinel = line.split(sentinel, 1)[0]
+                if before_sentinel.strip():
+                    lines.append(before_sentinel)
+                break
+            lines.append(line)
 
-        except Exception as e:
-            self._timed_out = True
-            raise ValueError(str(e))
+        return "".join(lines).strip()
 
-def filter_error(error):
-    # Filter out errors that we do not want to see
+    def run(self, command):
+        with self._lock:
+            if not self._started:
+                self.start()
+
+            if self._process is None or self._process.poll() is not None:
+                raise ValueError("Shell has exited and must be restarted.")
+
+            self._drain_queue()
+            sentinel = f"<<exit:{uuid.uuid4().hex}>>"
+            self._write_line(command)
+            self._write_line(self._sentinel_command(sentinel))
+            output = self._wait_for_sentinel(sentinel)
+            return output, ""
+
+
+def filter_output(output):
     filtered_lines = []
-    i = 0
-    error_lines = error.splitlines()
-    while i < len(error_lines):
-        line = error_lines[i]
-
-        # Skip the next lines if ioctl error, add relevant lines
-        if "Inappropriate ioctl for device" in line:
-            i += 3
-            if '<<exit>>' in error_lines[i]:
-                i += 1
-            while i < len(error_lines) - 1:
-                filtered_lines.append(error_lines[i])
-                i += 1
-            i += 1
+    for line in output.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            filtered_lines.append(line)
             continue
-
+        if "Inappropriate ioctl for device" in stripped:
+            continue
         filtered_lines.append(line)
-        i += 1
-    return '\n'.join(filtered_lines).strip()
+    return "\n".join(filtered_lines).strip()
 
-async def tool_function_call(command):
-    """Execute a command in the bash shell."""
+
+_shell_session = ShellSession()
+
+
+def tool_function(command):
     try:
-        bash_session = BashSession()
-
-        if not bash_session._started:
-            await bash_session.start()
-
-        output, error = await bash_session.run(command)
-        error = filter_error(error)
-        result = ""
-        if output:
-            result += output
+        output, error = _shell_session.run(command)
+        result = filter_output(output)
         if error:
-            result += "\nError:\n" + error
+            if result:
+                result += "\nError:\n" + error
+            else:
+                result = "Error:\n" + error
         return result.strip()
     except Exception as e:
         return f"Error: {str(e)}"
 
-def tool_function(command):
-    return asyncio.run(tool_function_call(command))
 
 if __name__ == "__main__":
-    # Example usage
     import sys
 
-    # Check if the script is called with arguments
     if len(sys.argv) < 2:
         print("Usage: python bash.py '<command>'")
     else:
-        # Extract the command from the command-line arguments
-        input_command = ' '.join(sys.argv[1:])
-        # Run the tool_function asynchronously
-        result = tool_function(input_command)
-        print(result)
+        input_command = " ".join(sys.argv[1:])
+        print(tool_function(input_command))

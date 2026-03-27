@@ -15,7 +15,7 @@ HyperAgents is a framework where AI agents **improve themselves**:
 3. The modified agent is evaluated, and the best variants survive
 4. Repeat — the agents evolve and get better over time
 
-This fork adds **local Ollama support** and **MLX support for Apple Silicon Macs** so you can run the entire loop on your own machine.
+This fork adds **local Ollama support**, **Windows support for the local workflow**, and **MLX support for Apple Silicon Macs** so you can run the entire loop on your own machine.
 
 ## Quick Start
 
@@ -29,6 +29,12 @@ brew install ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
 # Start the server
+ollama serve
+```
+
+On Windows, install Ollama from `https://ollama.com/download/windows` and start it from the desktop app or with:
+
+```powershell
 ollama serve
 ```
 
@@ -48,16 +54,31 @@ ollama pull mistral            # Fast and capable
 git clone https://github.com/quantumnic/HyperAgents-Ollama.git
 cd HyperAgents-Ollama
 
-# Automated setup
+# Automated setup (macOS / Linux)
 bash setup_local.sh
 
-# Or manual:
+# Automated setup (Windows PowerShell)
+powershell -ExecutionPolicy Bypass -File .\setup_local.ps1
+
+# Or manual (macOS / Linux):
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements_local.txt
 cp .env.example .env
 
+# Manual (Windows PowerShell):
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements_local.txt
+Copy-Item .env.example .env
+
 # Run the self-improvement loop!
 python generate_loop_local.py --domain text_classify --model ollama/llama3.2
+```
+
+If your repo has local changes, use the isolated runner instead of calling `generate_loop_local.py` directly. This avoids the loop's `git reset --hard` and `git clean -fd` from touching your working tree.
+
+```powershell
+.\run_local_isolated.ps1 -Domain text_classify -Model ollama/llama3.2 -MaxGeneration 1 -NumSamples 3
 ```
 
 ### 4. Watch it evolve 🧬
@@ -94,6 +115,13 @@ python generate_loop_local.py --output-dir ./my_experiments
 # Test your LLM connection
 python agent/llm.py
 ```
+
+Windows notes:
+
+- Install Git for Windows and make sure `git` is on `PATH`.
+- Use PowerShell or Windows Terminal for the local workflow.
+- The built-in shell tool automatically uses PowerShell or `cmd` on Windows instead of `/bin/bash`.
+- Use `.\run_local_isolated.ps1` when you want a disposable temp-repo run on Windows.
 
 ### MLX Models (Apple Silicon Macs)
 

@@ -81,6 +81,14 @@ def git_apply_diff(workdir, diff_file):
     return False
 
 
+def format_archive_value(value, precision=4):
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.{precision}f}"
+    return str(value)
+
+
 def get_base_commit(workdir):
     """Get current HEAD commit."""
     code, stdout, _ = run_command(["git", "rev-parse", "HEAD"], workdir=workdir)
@@ -312,7 +320,25 @@ def generate_loop_local(
         # Apply parent diffs (lineage)
         parent_entry = next((a for a in archive if a["id"] == parent_id), None)
         if parent_entry and "patch_file" in parent_entry:
-            git_apply_diff(project_dir, parent_entry["patch_file"])
+            parent_patch_applied = git_apply_diff(project_dir, parent_entry["patch_file"])
+            if not parent_patch_applied:
+                print(f"  Parent patch failed to apply, skipping generation {gen_id}.")
+                success = False
+                patch_file = None
+                score = None
+                evals_folder = output_dir
+                entry = {
+                    "id": gen_id,
+                    "parent": parent_id,
+                    "score": score,
+                    "gen": gen_id,
+                    "patch_file": None,
+                    "meta_success": False,
+                }
+                archive.append(entry)
+                with open(archive_file, "a") as f:
+                    f.write(json.dumps(entry) + "\n")
+                continue
 
         # Run meta agent
         evals_folder = output_dir  # meta agent can see previous gen results
@@ -327,14 +353,21 @@ def generate_loop_local(
             git_reset(project_dir, base_commit)
             # Re-apply parent lineage
             if parent_entry and "patch_file" in parent_entry:
-                git_apply_diff(project_dir, parent_entry["patch_file"])
+                parent_patch_applied = git_apply_diff(project_dir, parent_entry["patch_file"])
+                if not parent_patch_applied:
+                    print("  Parent patch failed to re-apply after reset, skipping evaluation.")
+                    success = False
             # Apply new modifications
-            git_apply_diff(project_dir, patch_file)
+            patch_applied = git_apply_diff(project_dir, patch_file) if success else False
+            if not patch_applied:
+                print("  Generated patch failed to apply cleanly, skipping evaluation.")
+                success = False
 
-            score = run_eval(
-                project_dir, domain, model, gen_output_dir,
-                gen_id, num_samples=num_samples, subset=subset,
-            )
+            if success:
+                score = run_eval(
+                    project_dir, domain, model, gen_output_dir,
+                    gen_id, num_samples=num_samples, subset=subset,
+                )
         else:
             print(f"  Meta agent failed, skipping evaluation.")
 
@@ -382,7 +415,10 @@ def generate_loop_local(
         marker = " ⭐" if entry.get("score") == max(
             (a.get("score", 0) or 0 for a in archive)
         ) else ""
-        print(f"  Gen {entry['id']:>8} | Score: {entry.get('score', 'N/A'):>8} | Parent: {entry.get('parent', '-'):>8}{marker}")
+        gen_text = format_archive_value(entry.get("id"), precision=0)
+        score_text = format_archive_value(entry.get("score"))
+        parent_text = "-" if entry.get("parent") is None else str(entry.get("parent"))
+        print(f"  Gen {gen_text:>8} | Score: {score_text:>8} | Parent: {parent_text:>8}{marker}")
 
     best = max((a for a in archive if a.get("score") is not None), key=lambda x: x["score"], default=None)
     if best:

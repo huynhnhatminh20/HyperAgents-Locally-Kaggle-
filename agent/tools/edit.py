@@ -1,5 +1,6 @@
 from pathlib import Path
-import subprocess
+import os
+import stat
 
 def tool_info():
     return {
@@ -83,8 +84,9 @@ def validate_path(path: str, command: str):
     
     # Check if it's an absolute path
     if not path_obj.is_absolute():
-        suggested_path = Path("") / path
-        raise ValueError(f"The path {path} is not an absolute path, it should start with '/'. Maybe you meant {suggested_path}?")
+        raise ValueError(
+            f"The path {path} is not absolute. Please provide an absolute path."
+        )
     
     # Check existence for non-create commands
     if not path_obj.exists() and command != "create":
@@ -149,16 +151,54 @@ def tool_function(command, path, file_text=None, view_range=None, old_str=None, 
 def read_file(path: Path) -> str:
     """Read and return file contents."""
     try:
-        return path.read_text()
+        return path.read_text(encoding="utf-8")
     except Exception as e:
         raise ValueError(f"Failed to read file: {e}")
 
 def write_file(path: Path, content: str):
     """Write content to file."""
     try:
-        path.write_text(content)
+        path.write_text(content, encoding="utf-8")
     except Exception as e:
         raise ValueError(f"Failed to write file: {e}")
+
+def is_hidden_path(path: Path) -> bool:
+    """Return True if the path should be hidden from directory listings."""
+    if path.name.startswith("."):
+        return True
+
+    if os.name == "nt":
+        try:
+            attributes = path.stat().st_file_attributes
+        except (AttributeError, OSError):
+            return False
+        return bool(attributes & stat.FILE_ATTRIBUTE_HIDDEN)
+
+    return False
+
+def list_directory(path: Path, max_depth: int = 2) -> str:
+    """List non-hidden files and directories up to max_depth using pure Python."""
+    lines = []
+
+    def walk(current: Path, depth: int):
+        if depth > max_depth:
+            return
+
+        children = sorted(
+            current.iterdir(),
+            key=lambda child: (not child.is_dir(), child.name.lower()),
+        )
+        for child in children:
+            if is_hidden_path(child):
+                continue
+            rel_path = child.relative_to(path)
+            suffix = "/" if child.is_dir() else ""
+            lines.append(str(rel_path).replace("\\", "/") + suffix)
+            if child.is_dir():
+                walk(child, depth + 1)
+
+    walk(path, 1)
+    return "\n".join(lines)
 
 def view_file(path: Path, view_range=None) -> str:
     """View file or directory contents."""
@@ -167,15 +207,8 @@ def view_file(path: Path, view_range=None) -> str:
             raise ValueError("The `view_range` parameter is not allowed when `path` points to a directory.")
         
         try:
-            # Use find command to list files and directories up to 2 levels deep
-            result = subprocess.run(
-                ['find', str(path), '-maxdepth', '2', '-not', '-path', '*/\\.*'],
-                capture_output=True,
-                text=True
-            )
-            if result.stderr:
-                return f"Error listing directory: {result.stderr}"
-            return f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{maybe_truncate(result.stdout, max_length=5000)}"
+            result = list_directory(path, max_depth=2)
+            return f"Here's the files and directories up to 2 levels deep in {path}, excluding hidden items:\n{maybe_truncate(result, max_length=5000)}"
         except Exception as e:
             raise ValueError(f"Failed to list directory: {e}")
     
