@@ -8,19 +8,9 @@ import uuid
 
 
 def tool_info():
-    shell_description = (
-        "Run commands in a persistent shell session. "
-        "Uses bash/sh on Unix-like systems and PowerShell or cmd on Windows."
-    )
     return {
         "name": "bash",
-        "description": f"""{shell_description}
-* When invoking this tool, the contents of the "command" parameter does NOT need to be XML-escaped.
-* You don't have access to the internet via this tool.
-* State is persistent across command calls and discussions with the user.
-* To inspect a particular line range of a file, use a shell command available on the current OS.
-* Please avoid commands that may produce a very large amount of output.
-* Please run long lived commands in the background if the shell supports it.""",
+        "description": "Run shell commands. Input MUST be a JSON object with a single 'command' key. Example: {\"command\": \"ls -R\"}",
         "input_schema": {
             "type": "object",
             "properties": {

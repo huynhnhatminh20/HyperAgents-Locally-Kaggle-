@@ -63,19 +63,34 @@ def check_for_tool_uses(response):
     """
     Checks if the response contains one or more tool calls in json code blocks.
     Returns a list of tool use dictionaries.
+    Handles common local model formatting errors.
     """
-    pattern = r'<json>\s*(\{.*?\})\s*</json>'
+    # Look for <json> blocks, but be flexible with whitespace and backticks
+    pattern = r'<json>\s*(.*?)\s*</json>'
     matches = re.findall(pattern, response, re.DOTALL)
     tool_uses = []
 
     for match in matches:
+        # Clean the match of any accidental markdown code fencing inside tags
+        match = re.sub(r'^```(json)?', '', match, flags=re.MULTILINE)
+        match = re.sub(r'```$', '', match, flags=re.MULTILINE).strip()
+
         try:
             tool_use = json.loads(match)
-            if 'tool_name' not in tool_use or 'tool_input' not in tool_use:
-                continue  # Skip invalid tool use
-            tool_uses.append(tool_use)
         except json.JSONDecodeError:
-            continue  # Skip malformed JSON blocks
+            # FUZZY PARSE: Try to fix common issues like trailing commas or missing quotes
+            try:
+                # 1. Remove trailing commas before closing braces/brackets
+                fixed = re.sub(r',\s*([}\]])', r'\1', match)
+                # 2. Try to wrap unquoted keys (simple version)
+                fixed = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed)
+                tool_use = json.loads(fixed)
+            except Exception:
+                continue  # Still failed, skip it
+
+        if 'tool_name' not in tool_use or 'tool_input' not in tool_use:
+            continue
+        tool_uses.append(tool_use)
 
     return tool_uses if tool_uses else None
 

@@ -105,10 +105,10 @@ def get_score_from_report(report_path):
         return None
 
 
-def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, subset="_train"):
+def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, subset="_train", num_workers=4):
     """Run initial evaluation of the base task agent."""
     print(f"\n{'='*60}")
-    print(f"Running initial evaluation on {domain}...")
+    print(f"Running initial evaluation on {domain} (Workers: {num_workers})...")
     print(f"{'='*60}")
     start_time = time.time()
 
@@ -120,7 +120,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
         "--run_id", run_id,
         "--domain", domain,
         "--num_samples", str(num_samples),
-        "--num_workers", "1",
+        "--num_workers", str(num_workers),
         "--subset", subset,
     ]
     run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
@@ -188,9 +188,9 @@ def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, it
     return success, patch_file
 
 
-def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, subset="_train"):
+def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, subset="_train", num_workers=4):
     """Evaluate the current task agent."""
-    print(f"  Evaluating generation {gen_id}...")
+    print(f"  Evaluating generation {gen_id} (Workers: {num_workers})...")
     start_time = time.time()
 
     run_id = f"{domain}_eval"
@@ -204,7 +204,7 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
         "--run_id", run_id,
         "--domain", domain,
         "--num_samples", str(num_samples),
-        "--num_workers", "1",
+        "--num_workers", str(num_workers),
         "--subset", subset,
     ]
     run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
@@ -244,6 +244,42 @@ def select_parent(archive, method="best"):
         return random.choices(valid, weights=probs, k=1)[0]["id"]
 
 
+def print_evolution_tree(archive):
+    """Print an ASCII representation of the evolution tree."""
+    if not archive:
+        return
+
+    # Build adjacency list
+    adj = {}
+    nodes = {str(a["id"]): a for a in archive}
+    for a in archive:
+        pid = str(a["parent"]) if a["parent"] is not None else None
+        if pid not in adj:
+            adj[pid] = []
+        adj[pid].append(str(a["id"]))
+
+    print(f"\n🌱 Evolution Tree:")
+
+    def print_node(node_id, prefix="", is_last=True):
+        entry = nodes.get(node_id)
+        if not entry:
+            return
+
+        score = format_archive_value(entry.get("score"))
+        connector = "└── " if is_last else "├── "
+        print(f"{prefix}{connector}Gen {node_id} (Score: {score})")
+
+        child_prefix = prefix + ("    " if is_last else "│   ")
+        children = adj.get(node_id, [])
+        for i, child_id in enumerate(children):
+            print_node(child_id, child_prefix, i == len(children) - 1)
+
+    # Start from root (parent is None)
+    roots = adj.get(None, [])
+    for i, root_id in enumerate(roots):
+        print_node(root_id, "", i == len(roots) - 1)
+
+
 def generate_loop_local(
     domain="text_classify",
     model=None,
@@ -252,6 +288,7 @@ def generate_loop_local(
     output_dir_parent=None,
     parent_selection="best",
     verbose=False,
+    num_workers=4,
 ):
     """Main local generation loop — no Docker required."""
     global VERBOSE
@@ -288,7 +325,7 @@ def generate_loop_local(
     subset = "_train" if domain == "text_classify" else ""
     initial_score = run_initial_eval(
         project_dir, domain, model, os.path.join(output_dir, "gen_initial"),
-        num_samples=num_samples, subset=subset,
+        num_samples=num_samples, subset=subset, num_workers=num_workers,
     )
     archive.append({"id": "initial", "parent": None, "score": initial_score, "gen": 0})
     with open(archive_file, "a") as f:
@@ -367,6 +404,7 @@ def generate_loop_local(
                 score = run_eval(
                     project_dir, domain, model, gen_output_dir,
                     gen_id, num_samples=num_samples, subset=subset,
+                    num_workers=num_workers,
                 )
         else:
             print(f"  Meta agent failed, skipping evaluation.")
@@ -420,9 +458,23 @@ def generate_loop_local(
         parent_text = "-" if entry.get("parent") is None else str(entry.get("parent"))
         print(f"  Gen {gen_text:>8} | Score: {score_text:>8} | Parent: {parent_text:>8}{marker}")
 
+    print_evolution_tree(archive)
+
     best = max((a for a in archive if a.get("score") is not None), key=lambda x: x["score"], default=None)
     if best:
         print(f"\n  Best: Gen {best['id']} with score {best['score']:.3f}")
+
+        # Export the best agent's source code for convenience
+        git_reset(project_dir, base_commit)
+        if best["id"] != "initial" and best.get("patch_file"):
+            git_apply_diff(project_dir, best["patch_file"])
+
+        best_agent_path = os.path.join(output_dir, "best_task_agent.py")
+        shutil.copy("task_agent.py", best_agent_path)
+        print(f"  Best agent source exported to: {best_agent_path}")
+
+        # Final cleanup reset
+        git_reset(project_dir, base_commit)
 
     total_elapsed = time.time() - loop_start
     print(f"\n  Total time: {total_elapsed/60:.1f} minutes")
@@ -441,6 +493,8 @@ if __name__ == "__main__":
                         help="Number of evolution generations")
     parser.add_argument("--num-samples", type=int, default=-1,
                         help="Number of samples to evaluate (-1 for all)")
+    parser.add_argument("--num-workers", type=int, default=4,
+                        help="Number of parallel evaluation workers")
     parser.add_argument("--output-dir", type=str, default=None,
                         help="Output directory")
     parser.add_argument("--parent-selection", type=str, default="best",
@@ -458,4 +512,5 @@ if __name__ == "__main__":
         output_dir_parent=args.output_dir,
         parent_selection=args.parent_selection,
         verbose=args.verbose,
+        num_workers=args.num_workers,
     )
