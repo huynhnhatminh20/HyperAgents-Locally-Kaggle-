@@ -65,9 +65,39 @@ def check_for_tool_uses(response):
     Returns a list of tool use dictionaries.
     Handles common local model formatting errors.
     """
-    # Look for <json> blocks, but be flexible with whitespace and backticks
+    # Primary: <json>...</json> tags
     pattern = r'<json>\s*(.*?)\s*</json>'
     matches = re.findall(pattern, response, re.DOTALL)
+
+    # Fallback: markdown ```json blocks — many local models use this format.
+    # Cannot use a simple lazy regex because the heredoc command string may
+    # itself contain ``` (e.g. Python f-strings). Walk char-by-char instead,
+    # tracking brace depth so we capture the full JSON object.
+    if not matches:
+        start = response.find('```json')
+        while start != -1:
+            brace_start = response.find('{', start)
+            if brace_start == -1:
+                break
+            depth, in_string, escape_next, pos = 0, False, False, brace_start
+            while pos < len(response):
+                ch = response[pos]
+                if escape_next:
+                    escape_next = False
+                elif ch == '\\' and in_string:
+                    escape_next = True
+                elif ch == '"' and not escape_next:
+                    in_string = not in_string
+                elif not in_string:
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            matches.append(response[brace_start:pos + 1])
+                            break
+                pos += 1
+            start = response.find('```json', start + 1)
     tool_uses = []
 
     for match in matches:

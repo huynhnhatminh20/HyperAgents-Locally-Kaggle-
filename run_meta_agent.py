@@ -70,6 +70,8 @@ def main():
         if args.outdir
         else "model_patch.diff"
     )
+    if args.outdir:
+        os.makedirs(args.outdir, exist_ok=True)
     with open(model_patch_outfile, "w") as f:
         f.write(model_patch)
 
