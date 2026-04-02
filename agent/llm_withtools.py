@@ -65,23 +65,21 @@ def check_for_tool_uses(response):
     Returns a list of tool use dictionaries.
     Handles common local model formatting errors.
     """
-    # Primary: <json>...</json> tags
-    pattern = r'<json>\s*(.*?)\s*</json>'
-    matches = re.findall(pattern, response, re.DOTALL)
+    def _collect_backtick_matches(text):
+        """Extract JSON objects from ```json...``` blocks using a brace-depth walker.
 
-    # Fallback: markdown ```json blocks — many local models use this format.
-    # Cannot use a simple lazy regex because the heredoc command string may
-    # itself contain ``` (e.g. Python f-strings). Walk char-by-char instead,
-    # tracking brace depth so we capture the full JSON object.
-    if not matches:
-        start = response.find('```json')
+        A simple lazy regex fails when the heredoc command string inside the JSON
+        contains triple-backtick fences (e.g. Python f-strings with inline code).
+        """
+        found = []
+        start = text.find('```json')
         while start != -1:
-            brace_start = response.find('{', start)
+            brace_start = text.find('{', start)
             if brace_start == -1:
                 break
             depth, in_string, escape_next, pos = 0, False, False, brace_start
-            while pos < len(response):
-                ch = response[pos]
+            while pos < len(text):
+                ch = text[pos]
                 if escape_next:
                     escape_next = False
                 elif ch == '\\' and in_string:
@@ -94,33 +92,45 @@ def check_for_tool_uses(response):
                     elif ch == '}':
                         depth -= 1
                         if depth == 0:
-                            matches.append(response[brace_start:pos + 1])
+                            found.append(text[brace_start:pos + 1])
                             break
                 pos += 1
-            start = response.find('```json', start + 1)
-    tool_uses = []
+            start = text.find('```json', start + 1)
+        return found
 
-    for match in matches:
-        # Clean the match of any accidental markdown code fencing inside tags
-        match = re.sub(r'^```(json)?', '', match, flags=re.MULTILINE)
-        match = re.sub(r'```$', '', match, flags=re.MULTILINE).strip()
-
-        try:
-            tool_use = json.loads(match)
-        except json.JSONDecodeError:
-            # FUZZY PARSE: Try to fix common issues like trailing commas or missing quotes
+    def _parse_matches(matches):
+        tool_uses = []
+        for match in matches:
+            # Strip any accidental markdown fencing inside the captured block
+            match = re.sub(r'^```(json)?', '', match, flags=re.MULTILINE)
+            match = re.sub(r'```$', '', match, flags=re.MULTILINE).strip()
             try:
-                # 1. Remove trailing commas before closing braces/brackets
-                fixed = re.sub(r',\s*([}\]])', r'\1', match)
-                # 2. Try to wrap unquoted keys (simple version)
-                fixed = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed)
-                tool_use = json.loads(fixed)
-            except Exception:
-                continue  # Still failed, skip it
+                tool_use = json.loads(match)
+            except json.JSONDecodeError:
+                # Fuzzy parse: trailing commas, unquoted keys
+                try:
+                    fixed = re.sub(r',\s*([}\]])', r'\1', match)
+                    fixed = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', fixed)
+                    tool_use = json.loads(fixed)
+                except Exception:
+                    continue
+            if 'tool_name' not in tool_use or 'tool_input' not in tool_use:
+                continue
+            tool_uses.append(tool_use)
+        return tool_uses
 
-        if 'tool_name' not in tool_use or 'tool_input' not in tool_use:
-            continue
-        tool_uses.append(tool_use)
+    # Primary: <json>...</json> tags
+    pattern = r'<json>\s*(.*?)\s*</json>'
+    json_tag_matches = re.findall(pattern, response, re.DOTALL)
+    tool_uses = _parse_matches(json_tag_matches)
+
+    # Fallback: ```json blocks — many local models use this format.
+    # Also used when the primary pattern matched only example/template <json>
+    # blocks (e.g. from the tooluse prompt itself) that fail to parse as valid
+    # tool calls, leaving tool_uses empty despite non-empty json_tag_matches.
+    if not tool_uses:
+        backtick_matches = _collect_backtick_matches(response)
+        tool_uses = _parse_matches(backtick_matches)
 
     return tool_uses if tool_uses else None
 
