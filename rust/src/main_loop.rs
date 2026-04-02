@@ -106,7 +106,7 @@ pub fn generate_loop_local(config: Config) -> Result<PathBuf> {
     let archive_file = output_dir.join("archive.jsonl");
 
     // Determine subset
-    let subset = if config.domain == "text_classify" {
+    let subset = if config.domain == "text_classify" || config.domain == "emotion" {
         "_train"
     } else {
         ""

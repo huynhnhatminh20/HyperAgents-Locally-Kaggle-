@@ -2,7 +2,7 @@ use anyhow::Result;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use crate::agent::task_agent::TaskAgent;
-use crate::domains::text_classify;
+use crate::domains::{text_classify, emotion};
 
 pub fn run_harness(
     agent: &TaskAgent,
@@ -16,26 +16,37 @@ pub fn run_harness(
     let eval_dir = output_dir.join(run_id);
     std::fs::create_dir_all(&eval_dir)?;
 
-    let mut samples = match domain {
-        "text_classify" => text_classify::get_split(subset),
-        other => return Err(anyhow::anyhow!("Domain '{}' not supported in Rust harness", other)),
+    let (ids_labels, inputs): (Vec<(String, String)>, Vec<serde_json::Value>) = match domain {
+        "text_classify" => {
+            let s = text_classify::get_split(subset);
+            (s.iter().map(|x| (x.id.clone(), x.label.clone())).collect(),
+             s.iter().map(|x| text_classify::format_input(x)).collect())
+        }
+        "emotion" => {
+            let s = emotion::get_split(subset);
+            (s.iter().map(|x| (x.id.clone(), x.label.clone())).collect(),
+             s.iter().map(|x| emotion::format_input(x)).collect())
+        }
+        other => return Err(anyhow::anyhow!("Domain '{}' not supported", other)),
     };
-    if num_samples > 0 { samples.truncate(num_samples as usize); }
-    println!("  Running {} samples for domain={} subset={}...", samples.len(), domain, subset);
 
-    let results: Vec<(String, String, String)> = samples.par_iter().map(|sample| {
-        let input = text_classify::format_input(sample);
-        let prediction = agent.forward(&input).unwrap_or_else(|e| {
-            eprintln!("  [WARN] agent.forward failed for {}: {}", sample.id, e);
-            "neutral".to_string()
+    let mut combined: Vec<(String, String, serde_json::Value)> = ids_labels
+        .into_iter().zip(inputs).map(|((id, lbl), inp)| (id, lbl, inp)).collect();
+    if num_samples > 0 { combined.truncate(num_samples as usize); }
+    println!("  Running {} samples for domain={} subset={}...", combined.len(), domain, subset);
+
+    let results: Vec<(String, String, String)> = combined.par_iter().map(|(id, label, input)| {
+        let pred = agent.forward(input).unwrap_or_else(|e| {
+            eprintln!("  [WARN] agent.forward failed for {}: {}", id, e);
+            String::new()
         });
-        (sample.id.clone(), sample.label.clone(), prediction)
+        (id.clone(), label.clone(), pred)
     }).collect();
 
     let predictions_path = eval_dir.join("predictions.csv");
     let mut wtr = csv::Writer::from_path(&predictions_path)?;
     wtr.write_record(["id", "label", "prediction"])?;
-    for (id, label, prediction) in &results { wtr.write_record([id, label, prediction])?; }
+    for (id, label, pred) in &results { wtr.write_record([id, label, pred])?; }
     wtr.flush()?;
     println!("  Predictions saved to {}", predictions_path.display());
     Ok(eval_dir)

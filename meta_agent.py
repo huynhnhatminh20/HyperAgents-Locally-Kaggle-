@@ -57,33 +57,33 @@ class MetaAgent(AgentSystem):
                 except Exception:
                     pass
 
+        task_agent_path = os.path.join(repo_path, "task_agent.py")
         instruction = (
             f"You are a Meta-Agent responsible for self-improving the `TaskAgent`. "
-            f"Modify the codebase at `{repo_path}` to achieve a higher evaluation score. "
-            f"You have {iterations_left if iterations_left is not None else 'unknown'} iterations left."
+            f"Rewrite `task_agent.py` to achieve a higher evaluation score. "
+            f"You have {iterations_left if iterations_left is not None else 'unknown'} iterations left.\n"
             f"{feedback_summary}"
             f"{domain_context}"
             f"{task_agent_source}\n\n"
             "CRITICAL RULES:\n"
-            f"1. ONLY modify `task_agent.py` at `{os.path.join(repo_path, 'task_agent.py')}`.\n"
+            f"1. ONLY modify `task_agent.py` at `{task_agent_path}`.\n"
             "2. NEVER delete the repository or run 'rm -rf'.\n"
-            "3. Use the `editor` tool with the `str_replace` command to fix the logic.\n\n"
-            "GOLDEN EXAMPLE OF A TOOL CALL:\n"
+            "3. Use the `bash` tool to overwrite the file with your improved version.\n\n"
+            "STRATEGY:\n"
+            "1. Study the current task_agent.py source and the evaluation score above.\n"
+            "2. Analyze failure cases from the report.\n"
+            "3. Write an improved version with a better prompt, smarter parsing, or domain-specific rules.\n\n"
+            "TOOL CALL FORMAT — use bash with a heredoc to write the COMPLETE new file:\n"
             "<json>\n"
             "{\n"
-            "  \"tool_name\": \"editor\",\n"
+            "  \"tool_name\": \"bash\",\n"
             "  \"tool_input\": {\n"
-            "    \"command\": \"str_replace\",\n"
-            f"    \"path\": \"{os.path.join(repo_path, 'task_agent.py')}\",\n"
-            "    \"old_str\": \"# original code line\",\n"
-            "    \"new_str\": \"# improved code line\"\n"
+            f"    \"command\": \"cat > {task_agent_path} << 'PYEOF'\\n<COMPLETE NEW task_agent.py CONTENT>\\nPYEOF\"\n"
             "  }\n"
             "}\n"
             "</json>\n\n"
-            "STRATEGY:\n"
-            "1. Study the Domain Dataset to understand labels.\n"
-            "2. Analyze failure cases in the report.\n"
-            "3. rewrite `task_agent.py` to include better instructions or specific hardcoded rules for failing examples."
+            "Replace <COMPLETE NEW task_agent.py CONTENT> with the full improved Python source. "
+            "Write the COMPLETE file in ONE bash call. Do NOT use str_replace."
         )
 
         new_msg_history = chat_with_agent(instruction, model=self.model, msg_history=[], logging=self.log, tools_available='all')

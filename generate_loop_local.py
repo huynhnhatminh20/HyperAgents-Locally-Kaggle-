@@ -356,7 +356,7 @@ def generate_loop_local(
 
         # Apply parent diffs (lineage)
         parent_entry = next((a for a in archive if a["id"] == parent_id), None)
-        if parent_entry and "patch_file" in parent_entry:
+        if parent_entry and parent_entry.get("patch_file"):
             parent_patch_applied = git_apply_diff(project_dir, parent_entry["patch_file"])
             if not parent_patch_applied:
                 print(f"  Parent patch failed to apply, skipping generation {gen_id}.")
