@@ -7,8 +7,8 @@ def tool_info():
         "name": "editor",
         "description": """Custom editing tool for viewing, creating and editing files.
 - view: Requires 'path'. Lists directory or shows file with line numbers.
-- create: Requires 'path' and 'file_text'. Creates a new file.
-- str_replace: Requires 'path', 'old_str', and 'new_str'. Replaces verbatim text.
+- create: Requires 'path' and 'file_text'. Creates or overwrites a file with the given content.
+- str_replace: Requires 'path', 'old_str', and 'new_str'. Replaces a unique verbatim string.
 - insert: Requires 'path', 'insert_line', and 'new_str'. Inserts text after line number.
 - undo_edit: Requires 'path'. Reverts last change to the file.
 """,
@@ -87,10 +87,6 @@ def validate_path(path: str, command: str):
     if not path_obj.exists() and command != "create":
         raise ValueError(f"The path {path} does not exist. Please provide a valid path.")
     
-    # Check if file already exists for create command
-    if command == "create" and path_obj.exists():
-        raise ValueError(f"File already exists at: {path}. Cannot overwrite files using command `create`.")
-    
     # Check if it's a directory
     if path_obj.is_dir() and command != "view":
         raise ValueError(f"The path {path} is a directory and only the `view` command can be used on directories")
@@ -118,9 +114,13 @@ def tool_function(command, path, file_text=None, view_range=None, old_str=None, 
         elif command == "create":
             if not file_text:
                 raise ValueError("Parameter `file_text` is required for command: create")
+            # Save old content to history before overwriting (enables undo)
+            already_exists = path_obj.exists()
+            if already_exists:
+                file_history.add(str(path_obj), read_file(path_obj))
             write_file(path_obj, file_text)
-            file_history.add(str(path_obj), file_text)
-            return f"File created successfully at: {path}"
+            action = "overwritten" if already_exists else "created"
+            return f"File {action} successfully at: {path}"
             
         elif command == "str_replace":
             if not old_str:
