@@ -14,7 +14,7 @@ impl MetaAgent {
         Self { model: model.to_string(), chat_history_file }
     }
 
-    pub fn forward(&self, repo_path: &Path, eval_path: &Path, iterations_left: usize) -> Result<()> {
+    pub fn forward(&self, repo_path: &Path, eval_path: &Path, iterations_left: usize, domain: &str) -> Result<()> {
         let prompt_file = repo_path.join("agent_prompt.txt");
         let current_prompt = if prompt_file.exists() {
             std::fs::read_to_string(&prompt_file).unwrap_or_else(|_| DEFAULT_PROMPT.to_string())
@@ -22,17 +22,29 @@ impl MetaAgent {
             DEFAULT_PROMPT.to_string()
         };
         let score_str = self.find_latest_score(eval_path);
+
+        let (task_desc, labels) = match domain {
+            "emotion" => (
+                "emotion detection (classify the primary emotion in a sentence)",
+                "joy, anger, sadness, fear, surprise",
+            ),
+            _ => (
+                "sentiment classification",
+                "positive, negative, neutral",
+            ),
+        };
+
         let user_msg = format!(
-            "You are a Meta-Agent improving a sentiment classification prompt.\n\n\
+            "You are a Meta-Agent improving a {task_desc} prompt.\n\n\
             Current system prompt for the classifier:\n---\n{current_prompt}\n---\n\n\
             Latest evaluation accuracy: {score_str}\n\
             Iterations remaining after this: {iterations_left}\n\n\
-            The classifier must output ONLY one word: positive, negative, or neutral.\n\n\
+            The classifier must output ONLY one of these labels: {labels}\n\n\
             Your task: Write an improved system prompt that achieves higher accuracy.\n\
             The prompt should:\n\
-            - Be clear and unambiguous\n\
-            - Tell the model to respond with ONLY one word\n\
-            - Include guidance for edge cases if helpful\n\
+            - Clearly state the valid labels: {labels}\n\
+            - Tell the model to respond with ONLY one word (the label)\n\
+            - Include brief guidance for distinguishing similar emotions if helpful\n\
             - Not include any code or markdown formatting\n\n\
             Output ONLY the new prompt text. No explanations, no code blocks, no markdown."
         );

@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::llm::{LlmClient, Message};
 
-pub const DEFAULT_PROMPT: &str = "You are a sentiment classifier. Classify the sentiment of the given text.\nRespond with ONLY one word: positive, negative, or neutral.\nDo not add any explanation or punctuation.";
+pub const DEFAULT_PROMPT: &str = "You are a text classifier. Read the instruction and classify the text accordingly.\nRespond with ONLY the label word in lowercase. No explanation or punctuation.";
 
 pub struct TaskAgent {
     pub model: String,
@@ -36,20 +36,29 @@ impl TaskAgent {
         ];
         let client = LlmClient::new(&self.model);
         let response = client.chat(&messages)?;
-        Ok(self.parse_prediction(&response))
+
+        // Derive valid labels from the domain instruction (covers both text_classify and emotion)
+        let domain = inputs.get("domain").and_then(|v| v.as_str()).unwrap_or("");
+        let valid_labels: &[&str] = match domain {
+            "emotion" => &["joy", "anger", "sadness", "fear", "surprise"],
+            _ => &["positive", "negative", "neutral"],
+        };
+        Ok(self.parse_prediction(&response, valid_labels))
     }
 
-    fn parse_prediction(&self, response: &str) -> String {
+    fn parse_prediction(&self, response: &str, valid_labels: &[&str]) -> String {
         let cleaned = response.trim().to_lowercase();
+        // Try exact first-word match
         let first = cleaned.lines().next().unwrap_or("")
             .split_whitespace().next().unwrap_or("")
             .trim_matches(|c: char| !c.is_alphabetic());
-        if first == "positive" || first == "negative" || first == "neutral" {
+        if valid_labels.contains(&first) {
             return first.to_string();
         }
-        for label in &["positive", "negative", "neutral"] {
+        // Scan for any valid label in the response
+        for &label in valid_labels {
             if cleaned.contains(label) { return label.to_string(); }
         }
-        "neutral".to_string()
+        String::new()
     }
 }

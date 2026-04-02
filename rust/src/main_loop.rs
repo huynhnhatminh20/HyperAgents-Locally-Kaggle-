@@ -200,6 +200,7 @@ pub fn generate_loop_local(config: Config) -> Result<PathBuf> {
             &base_commit,
             &evals_folder,
             config.max_generation - gen_id,
+            &config.domain,
         )?;
 
         let mut score: Option<f64> = None;
@@ -413,6 +414,7 @@ fn run_meta_agent(
     _base_commit: &str,
     evals_folder: &Path,
     iterations_left: usize,
+    domain: &str,
 ) -> Result<(bool, Option<String>)> {
     println!("\n  Running meta agent (model={})…", model);
     let start = std::time::Instant::now();
@@ -423,7 +425,7 @@ fn run_meta_agent(
 
     let meta = MetaAgent::new(model, chat_history_file);
 
-    match meta.forward(project_dir, evals_folder, iterations_left) {
+    match meta.forward(project_dir, evals_folder, iterations_left, domain) {
         Ok(()) => {
             // Save the new agent_prompt.txt to the gen directory for later restore
             let src = project_dir.join("agent_prompt.txt");
