@@ -83,11 +83,11 @@ MAX_TOKENS=4096
 # Ollama (local)
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
 
-# OpenRouter — Gemma 3 4B (free)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 3 --verbose
+# OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
-# OpenRouter — Qwen3 8B (free)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 3 --verbose
+# OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
 # Apple Silicon MLX
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain text_classify --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit --max-generation 5
@@ -156,14 +156,14 @@ cargo build --release
 # Ollama (local)
 /Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
 
-# OpenRouter — Gemma 3 4B (free)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 3 --parent-selection best --verbose
+# OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
 
-# OpenRouter — Qwen3 8B (free)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 3 --verbose
+# OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
-# OpenRouter — DeepSeek R1 (free, reasoning model)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 2 --verbose
+# OpenRouter — DeepSeek R1 (free, reasoning model, num-workers 1)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 1 --verbose
 ```
 
 Or via cargo (cd into rust/ first):
