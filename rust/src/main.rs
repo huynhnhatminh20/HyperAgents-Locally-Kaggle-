@@ -29,7 +29,7 @@ struct Cli {
     max_generation: usize,
 
     /// Number of samples to evaluate (-1 for all)
-    #[arg(long, default_value_t = -1)]
+    #[arg(long, default_value_t = -1, allow_hyphen_values = true)]
     num_samples: i64,
 
     /// Number of parallel evaluation workers
