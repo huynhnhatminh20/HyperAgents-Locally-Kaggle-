@@ -17,12 +17,14 @@ Examples:
   hyperagents-comms --task collaborate --rounds 3
   hyperagents-comms --task protocol --rounds 5
   hyperagents-comms --task free --topic \"trade-offs in distributed systems\"
+  hyperagents-comms --task language --scenario 0
+  hyperagents-comms --task language --scenario 1 --model llamacpp/local
   hyperagents-comms --task relay --agent-model ollama/llama3.2 --overseer-model openrouter/google/gemma-3-4b-it:free"
 )]
 struct Cli {
     /// Communication task
     #[arg(long, default_value = "relay",
-          value_parser = ["relay", "collaborate", "protocol", "free"])]
+          value_parser = ["relay", "collaborate", "protocol", "free", "language"])]
     task: String,
 
     /// Model for all three agents (A, B, overseer) — override individually below

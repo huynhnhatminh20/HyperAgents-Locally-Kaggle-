@@ -6,8 +6,9 @@ use std::path::PathBuf;
 
 use crate::comms::agents::{CommunicatingAgent, ExchangeEntry, OverseerAgent, OverseerFeedback};
 use crate::comms::tasks::{
-    COLLABORATE_SCENARIOS, FREE_TOPICS, PROTOCOL_A_SYSTEM, PROTOCOL_B_SYSTEM,
-    PROTOCOL_ROUNDS, RELAY_SCENARIOS,
+    COLLABORATE_SCENARIOS, FREE_TOPICS, LANGUAGE_A_BOOTSTRAP, LANGUAGE_A_ENCODE,
+    LANGUAGE_B_BOOTSTRAP, LANGUAGE_B_DECODE, LANGUAGE_SCENARIOS,
+    PROTOCOL_A_SYSTEM, PROTOCOL_B_SYSTEM, PROTOCOL_ROUNDS, RELAY_SCENARIOS,
 };
 
 // ── ANSI colours ──────────────────────────────────────────────────────────────
@@ -189,6 +190,17 @@ pub fn run(cfg: CommsConfig) -> Result<PathBuf> {
             run_protocol(
                 &mut agent_a, &mut agent_b, &mut overseer,
                 cfg.rounds, &mut log,
+            )?;
+        }
+        "language" => {
+            let scenarios = LANGUAGE_SCENARIOS;
+            let scenario = &scenarios[cfg.scenario_idx % scenarios.len()];
+            println!("  {}", c(&format!("Scenario: {}  (domain: {})", scenario.id, scenario.domain), &[DIM]));
+            println!("  {}", c("Goal: invent a shared symbol language; encode/decode messages.", &[DIM]));
+            println!();
+            run_language(
+                &mut agent_a, &mut agent_b, &mut overseer,
+                scenario, cfg.rounds, &mut log,
             )?;
         }
         "free" | _ => {
@@ -548,6 +560,341 @@ fn run_free(
         }));
         println!();
     }
+    Ok(())
+}
+
+// ── language ──────────────────────────────────────────────────────────────────
+
+/// Parse "sym = meaning" or "sym: meaning" lines out of agent messages to build
+/// a cumulative lexicon that survives across rounds.
+fn extract_lexicon_lines(text: &str) -> Vec<String> {
+    let mut entries: Vec<String> = Vec::new();
+    let mut in_block = false;
+    for line in text.lines() {
+        let s = line.trim();
+        // section headers that start a lexicon block
+        let upper = s.to_uppercase();
+        if upper.starts_with("LEXICON") || upper.starts_with("NEW SYMBOLS") {
+            in_block = true;
+            continue;
+        }
+        // inline "NEW: sym = meaning"
+        if upper.starts_with("NEW:") {
+            let rest = s[4..].trim();
+            if rest.contains('=') || rest.contains(':') {
+                let e = rest.replace(':', " = ").trim().to_string();
+                if !e.is_empty() && !entries.contains(&e) {
+                    entries.push(e);
+                }
+            }
+            continue;
+        }
+        // blank line ends the block
+        if in_block && s.is_empty() {
+            in_block = false;
+            continue;
+        }
+        if in_block {
+            // stop if we hit a new heading-like line that isn't an entry
+            if s.len() > 60 && !s.contains('=') {
+                in_block = false;
+                continue;
+            }
+            let cleaned = s.trim_start_matches(['-', '•', '*', ' ']);
+            if cleaned.contains('=') || cleaned.contains(':') {
+                let e = cleaned.replace(':', " = ").trim().to_string();
+                if !e.is_empty() && e.len() < 80 && !entries.contains(&e) {
+                    entries.push(e);
+                }
+            }
+        }
+    }
+    entries
+}
+
+fn lexicon_string(entries: &[String]) -> String {
+    if entries.is_empty() {
+        "(none yet)".to_string()
+    } else {
+        entries.iter().map(|e| format!("  {e}")).collect::<Vec<_>>().join("\n")
+    }
+}
+
+fn print_lexicon(entries: &[String]) {
+    const BLUE: &str = "\x1b[94m";
+    println!("\n{}", section("LEXICON"));
+    if entries.is_empty() {
+        println!("  {}", c("(none yet)", &[DIM]));
+    } else {
+        for e in entries {
+            println!("  {}{e}{RESET}", BLUE);
+        }
+    }
+}
+
+/// Free evolution round data — generated on the fly after scripted rounds are done.
+struct FreeRound {
+    concept_label: String,
+    message: String,
+    expected_meaning: String,
+}
+
+/// Ask the overseer to propose the next evolution challenge, then run it.
+fn make_free_round(
+    overseer: &mut OverseerAgent,
+    domain: &str,
+    lexicon: &[String],
+    rnd: usize,
+) -> Result<FreeRound> {
+    let lex_str = lexicon_string(lexicon);
+    let prompt = format!(
+        "You are the curator of an emergent language experiment (domain: {domain}).\n\
+         The agents have built this lexicon so far:\n{lex_str}\n\n\
+         Design the next encoding challenge (round {rnd}).\n\
+         - Choose a NEW concept cluster not yet in the lexicon that fits the domain\n\
+         - Write a concrete message for Agent A to encode (10-20 natural-language words)\n\
+         - Write the ground-truth meaning for verification\n\n\
+         Respond in EXACTLY this format (no extra text):\n\
+         CONCEPT_LABEL: <short label, e.g. \"emotions + reactions\">\n\
+         MESSAGE: <the message Agent A must encode>\n\
+         EXPECTED: <the ground-truth meaning for the overseer>"
+    );
+    let messages = [
+        crate::llm::Message { role: "user".into(), content: prompt },
+    ];
+    let raw = overseer.client.chat(&messages)?;
+
+    let mut concept_label = format!("free evolution round {rnd}");
+    let mut message = String::new();
+    let mut expected_meaning = String::new();
+    for line in raw.lines() {
+        if let Some(v) = line.strip_prefix("CONCEPT_LABEL:") { concept_label = v.trim().to_string(); }
+        if let Some(v) = line.strip_prefix("MESSAGE:")       { message = v.trim().to_string(); }
+        if let Some(v) = line.strip_prefix("EXPECTED:")      { expected_meaning = v.trim().to_string(); }
+    }
+    if message.is_empty() { message = format!("(round {rnd} — free evolution in domain {domain})"); }
+    if expected_meaning.is_empty() { expected_meaning = message.clone(); }
+    Ok(FreeRound { concept_label, message, expected_meaning })
+}
+
+fn run_language(
+    agent_a: &mut CommunicatingAgent,
+    agent_b: &mut CommunicatingAgent,
+    overseer: &mut OverseerAgent,
+    scenario: &crate::comms::tasks::LanguageScenario,
+    total_rounds: usize,
+    log: &mut Vec<Value>,
+) -> Result<()> {
+    println!("{}", c(
+        &format!("Task: LANGUAGE  |  Scenario: {}  |  Domain: {}", scenario.id, scenario.domain),
+        &[BOLD],
+    ));
+    let scripted = scenario.rounds.len();
+    let extra = total_rounds.saturating_sub(scripted);
+    if extra > 0 {
+        println!("  {} scripted rounds + {} free-evolution rounds = {} total",
+            c(&scripted.to_string(), &[BOLD]),
+            c(&extra.to_string(), &[BOLD, YELLOW]),
+            c(&total_rounds.to_string(), &[BOLD]),
+        );
+    }
+    println!();
+
+    let mut lexicon: Vec<String> = vec![];
+
+    for rnd in 1..=total_rounds {
+        let is_bootstrap = rnd == 1;
+        let is_scripted  = rnd <= scripted;
+
+        // ── pick round data (scripted or generated) ──
+        let (concept_label, message, expected_meaning);
+        let free_buf: FreeRound;  // keep alive for the whole iteration
+
+        if is_scripted {
+            let d = &scenario.rounds[rnd - 1];
+            concept_label  = d.concept_label;
+            message        = d.message;
+            expected_meaning = d.expected_meaning;
+        } else {
+            print!("\n  {} generating free-evolution challenge…", c("Overseer:", &[DIM, YELLOW]));
+            free_buf = make_free_round(overseer, scenario.domain, &lexicon, rnd)?;
+            println!("  {}", c(&format!("concepts: {}", free_buf.concept_label), &[DIM]));
+            concept_label    = free_buf.concept_label.as_str();
+            message          = free_buf.message.as_str();
+            expected_meaning = free_buf.expected_meaning.as_str();
+        };
+
+        let phase = if is_scripted { "scripted" } else { "evolved" };
+        println!("{}", banner(&format!(
+            "Round {rnd} / {total_rounds}  [{phase}]  ·  {concept_label}"
+        )));
+
+        let lex_str = lexicon_string(&lexicon);
+
+        let (a_sys, b_sys) = if is_bootstrap {
+            (
+                LANGUAGE_A_BOOTSTRAP
+                    .replace("{DOMAIN}", scenario.domain)
+                    .replace("{CONCEPTS}", concept_label)
+                    .replace("{MESSAGE}", message),
+                LANGUAGE_B_BOOTSTRAP
+                    .replace("{DOMAIN}", scenario.domain)
+                    .replace("{CONCEPTS}", concept_label)
+                    .replace("{MESSAGE}", message),
+            )
+        } else {
+            (
+                LANGUAGE_A_ENCODE
+                    .replace("{DOMAIN}", scenario.domain)
+                    .replace("{CONCEPTS}", concept_label)
+                    .replace("{LEXICON}", &lex_str)
+                    .replace("{MESSAGE}", message),
+                LANGUAGE_B_DECODE
+                    .replace("{DOMAIN}", scenario.domain)
+                    .replace("{CONCEPTS}", concept_label)
+                    .replace("{LEXICON}", &lex_str),
+            )
+        };
+
+        agent_a.start_round(&a_sys);
+        agent_b.start_round(&b_sys);
+
+        let mut exchange_log: Vec<ExchangeEntry> = vec![];
+
+        // ── Agent A goes first ──
+        let a_opener = if is_bootstrap {
+            format!(
+                "Let's invent our symbol language for domain '{}'.\n\
+                 Concepts this round: {concept_label}\n\
+                 Message we need to encode: \"{message}\"",
+                scenario.domain,
+            )
+        } else {
+            format!("Encode this message using our lexicon: \"{message}\"")
+        };
+
+        let msg_a = agent_a.receive(&a_opener)?;
+        print_msg('A', 'B', &msg_a, CYAN);
+        exchange_log.push(ExchangeEntry { agent: 'A', text: msg_a.clone() });
+
+        // ── Agent B responds ──
+        let msg_b = agent_b.receive(&msg_a)?;
+        print_msg('B', 'A', &msg_b, MAGENTA);
+        exchange_log.push(ExchangeEntry { agent: 'B', text: msg_b.clone() });
+
+        // ── Bootstrap: one more A→B to finalise & emit test encode ──
+        if is_bootstrap {
+            let finalise = "Good. Please emit the final agreed LEXICON block, \
+                then encode the test message using only our new symbols.";
+            let final_a = agent_a.receive(finalise)?;
+            print_msg('A', 'B', &final_a, CYAN);
+            exchange_log.push(ExchangeEntry { agent: 'A', text: final_a.clone() });
+
+            let final_b = agent_b.receive(&final_a)?;
+            print_msg('B', 'A', &final_b, MAGENTA);
+            exchange_log.push(ExchangeEntry { agent: 'B', text: final_b.clone() });
+
+            // Harvest lexicon from this round
+            for entry in exchange_log.iter() {
+                for new_e in extract_lexicon_lines(&entry.text) {
+                    if !lexicon.contains(&new_e) {
+                        lexicon.push(new_e);
+                    }
+                }
+            }
+        } else {
+            // Harvest any NEW: declarations from A's message
+            for new_e in extract_lexicon_lines(&msg_a) {
+                if !lexicon.contains(&new_e) {
+                    lexicon.push(new_e);
+                }
+            }
+        }
+
+        print_lexicon(&lexicon);
+
+        // ── Measure compression ──
+        let a_symbol_msg = exchange_log.iter()
+            .filter(|e| e.agent == 'A')
+            .last()
+            .map(|e| e.text.as_str())
+            .unwrap_or("");
+        let a_tokens: usize = a_symbol_msg.split_whitespace().count();
+        let natural_tokens: usize = message.split_whitespace().count();
+        let ratio_pct = if natural_tokens > 0 {
+            (a_tokens * 100) / natural_tokens
+        } else { 100 };
+
+        if !is_bootstrap {
+            let ratio_col = if ratio_pct <= 50 { GREEN } else if ratio_pct <= 80 { YELLOW } else { RED };
+            println!(
+                "\n  {} {} tokens  (natural: {} tokens — {}% of original)",
+                c("A's encoding:", &[DIM]),
+                c(&a_tokens.to_string(), &[BOLD]),
+                natural_tokens,
+                c(&ratio_pct.to_string(), &[BOLD, ratio_col]),
+            );
+        }
+
+        // ── Overseer ──
+        let task_ctx = format!(
+            "EMERGENT LANGUAGE EXPERIMENT\n\
+             Domain: {}\n\
+             Round {rnd} — concepts: {concept_label}\n\
+             Original message to encode: \"{message}\"\n\
+             Expected meaning: \"{expected_meaning}\"\n\
+             Established lexicon:\n{lex_str}",
+            scenario.domain,
+        );
+
+        let vqs: &[&str] = if is_bootstrap {
+            &[
+                "Did the agents agree on a clear, unambiguous lexicon?",
+                "Are all required concepts covered by symbols?",
+                "Is each symbol short (1-3 chars) and distinct?",
+                "Did Agent B correctly decode the test message?",
+            ]
+        } else {
+            &[
+                "Did Agent B correctly decode the meaning?",
+                "Did Agent A use ONLY symbols (no natural language sentences)?",
+                "Were new concepts handled with new symbol declarations?",
+                "Is the encoding compact relative to natural language?",
+            ]
+        };
+
+        let b_last = exchange_log.iter()
+            .rfind(|e| e.agent == 'B')
+            .map(|e| e.text.as_str())
+            .unwrap_or("");
+        let fb = overseer.evaluate(&exchange_log, &task_ctx, vqs, b_last)?;
+        print_overseer(&fb, &overseer.scores);
+
+        agent_a.add_tip(format!("Round {rnd}: {}", fb.tips_a.join("; ")));
+        agent_b.add_tip(format!("Round {rnd}: {}", fb.tips_b.join("; ")));
+
+        log.push(json!({
+            "round": rnd,
+            "phase": phase,
+            "scenario": scenario.id,
+            "domain": scenario.domain,
+            "concepts": concept_label,
+            "message": message,
+            "lexicon_size": lexicon.len(),
+            "lexicon": lexicon,
+            "compression_pct": ratio_pct,
+            "exchange": exchange_log.iter().map(|e| json!({"agent": e.agent.to_string(), "text": e.text})).collect::<Vec<_>>(),
+            "score": fb.score,
+            "verdict": fb.verdict,
+        }));
+        println!();
+    }
+
+    // ── final lexicon printout ──
+    println!("{}", banner("FINAL LEXICON"));
+    print_lexicon(&lexicon);
+    println!();
+
     Ok(())
 }
 

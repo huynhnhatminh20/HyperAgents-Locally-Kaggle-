@@ -113,7 +113,7 @@ pub struct OverseerFeedback {
 }
 
 pub struct OverseerAgent {
-    client: LlmClient,
+    pub client: LlmClient,
     pub scores: Vec<u8>,
 }
 
