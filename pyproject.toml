@@ -1,0 +1,6 @@
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+# Ignore E402 (Module level import not at top of file) because of sys.path hacks
+ignore = ["E402"]
