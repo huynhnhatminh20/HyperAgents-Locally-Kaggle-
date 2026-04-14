@@ -10,6 +10,9 @@ import sys
 import time
 from datetime import datetime
 
+from dotenv import load_dotenv
+load_dotenv()  # load .env into os.environ before spawning any subprocesses
+
 from utils.common import file_exist_and_not_empty, load_json_file
 
 # Global verbose flag
