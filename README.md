@@ -1,112 +1,290 @@
 # 🧬 HyperAgents-Ollama
 
-**Self-Improving AI Agents with Local Models**
+**Self-Improving AI Agents — Local, Cloud, or Free**
 
-A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/HyperAgents) that runs entirely locally using [Ollama](https://ollama.ai) or [MLX](https://github.com/ml-explore/mlx-examples) — no cloud API keys required.
+A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/HyperAgents) extended with local Ollama, Apple Silicon MLX, OpenRouter cloud gateway, and a Rust port of the evolution loop.
 
 > **Paper:** [Hyperagents](https://arxiv.org/abs/2603.19461) — Self-referential agents that integrate a task agent and a meta agent into a single editable program, enabling metacognitive self-modification.
 
-## What is this?
+---
 
-HyperAgents is a framework where AI agents **improve themselves**:
+## How it works
 
-1.  **Task Agent:** Solves a given problem using internal **Chain of Thought (CoT)** reasoning.
-2.  **Meta Agent:** Studies the Task Agent's source code and failure cases to modify and improve it.
-3.  **Evolution Loop:** The agents evolve over generations, with the best variants surviving and breeding.
+```
+┌─────────────────────────────────────────────────────────┐
+│  Hyper Loop                                             │
+│                                                         │
+│  Gen 0:  TaskAgent solves tasks  →  baseline score      │
+│                                                         │
+│  Gen N:  MetaAgent (expert) reads:                      │
+│            • task_agent.py source code                  │
+│            • failure cases from last eval               │
+│            • previous patch history                     │
+│          → rewrites task_agent.py                       │
+│          TaskAgent (new version) → new score            │
+│          Best score survives, tree grows                │
+└─────────────────────────────────────────────────────────┘
+```
 
-This fork adds **local Ollama support**, **Parallel Evaluation**, **Domain-Aware Meta-Agents**, and **macOS/Windows isolated runners** so you can safely run the entire loop on your own machine.
+- **Task Agent** (`task_agent.py`) — solves domain tasks with Chain-of-Thought reasoning
+- **Meta Agent** (`meta_agent.py`) — studies failures and rewrites the Task Agent's code
+- **Evolution Loop** — iterates for N generations, selecting the best-scoring lineage
 
 ---
 
-## ✨ Incredible New Features
+## Setup
 
--   **🧠 Chain of Thought (CoT):** The TaskAgent now uses a `ThoughtLog` to reason before answering, providing the Meta-Agent with a rich internal "trace" to optimize.
--   **🔍 Domain-Aware Meta-Agent:** The Meta-Agent now reads the current `task_agent.py` source code and the domain's `dataset.py` to make strategic, data-driven modifications.
--   **⚡ Parallel Evaluation:** Run evaluations across multiple CPU cores with `--num-workers` to speed up the evolution loop by up to 10x.
--   **🌱 Evolution Tree:** Visualize the "tree of life" of your agents directly in the terminal with ASCII lineage and score tracking.
--   **🛠️ Fuzzy JSON Parsing:** Robust handling of minor formatting errors common in smaller local models (like Llama 3.2).
--   **🛡️ Isolated Runners:** Use `run_local_isolated.sh` (macOS/Linux) or `run_local_isolated.ps1` (Windows) to run experiments in a temporary repository without touching your active code.
-
----
-
-## Quick Start
-
-### 1. Setup & Pull Models
-Follow the [Ollama installation guide](https://ollama.ai) and pull your preferred models:
 ```bash
-ollama pull qwen2.5-coder      # Recommended for Meta-Agent
-ollama pull llama3.2          # Fast for Task-Agent
-```
+git clone <repo>
+cd HyperAgents-Ollama
+python -m venv venv && source venv/bin/activate
+pip install -r requirements_local.txt
 
-### 2. Isolated Run (Recommended)
-Run a safe evolution experiment in a temporary directory:
-```bash
-# macOS / Linux
-bash run_local_isolated.sh --domain text_classify --model ollama/qwen2.5-coder --max-generation 5
-
-# Windows (PowerShell)
-.\run_local_isolated.ps1 -Domain text_classify -Model ollama/qwen2.5-coder -MaxGeneration 5
-```
-
-### 3. The "Grand Tour" Benchmark
-Test the system's "Incredible" state across multiple domains automatically:
-```bash
-bash run_all_benchmarks.sh ollama/qwen2.5-coder 2 5 4
+cp .env.example .env
+# edit .env — see Configuration section below
 ```
 
 ---
 
-## Watch it evolve 🧬
+## Configuration (`.env`)
+
+```bash
+# ── Local Ollama ──────────────────────────────────────
+OLLAMA_BASE_URL=http://localhost:11434
+MODEL_NAME=ollama/gemma4:e4b        # any model you have pulled
+MAX_TOKENS=4096
+
+# ── Apple Silicon (MLX) ──────────────────────────────
+# MODEL_NAME=mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit
+# MLX_MODEL_PATH=/path/to/local/weights   # optional local override
+
+# ── OpenRouter (300+ models, many free) ──────────────
+# OPENROUTER_API_KEY=sk-or-...
+# MODEL_NAME=openrouter/google/gemma-3-4b-it:free
+```
+
+### OpenRouter free models
+
+| Model | `MODEL_NAME` |
+|---|---|
+| Gemma 3 4B | `openrouter/google/gemma-3-4b-it:free` |
+| Llama 4 Scout | `openrouter/meta-llama/llama-4-scout:free` |
+| Qwen3 8B | `openrouter/qwen/qwen3-8b:free` |
+| DeepSeek R1 | `openrouter/deepseek/deepseek-r1-0528:free` |
+| Claude Sonnet | `openrouter/anthropic/claude-sonnet-4-5` |
+
+---
+
+## Python — Running the hyper loop
+
+### Quick start
+
+```bash
+# Ollama (local)
+python generate_loop_local.py \
+  --domain text_classify \
+  --model ollama/gemma4:e4b \
+  --max-generation 5
+
+# OpenRouter (cloud, free tier)
+python generate_loop_local.py \
+  --domain rust \
+  --model openrouter/google/gemma-3-4b-it:free \
+  --max-generation 8
+
+# Apple Silicon MLX
+python generate_loop_local.py \
+  --domain text_classify \
+  --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit \
+  --max-generation 5
+```
+
+### All options
 
 ```
-🌱 Evolution Tree:
-└── Gen initial (Score: 0.650)
-    ├── Gen 1 (Score: 0.700)
-    │   └── Gen 3 (Score: 0.850) ⭐
-    └── Gen 2 (Score: 0.680)
+python generate_loop_local.py [OPTIONS]
 
-Best: Gen 3 with score 0.850
-Best agent source exported to: ./outputs_local/run_XXXX/best_task_agent.py
+  --domain           {text_classify, search_arena, paper_review, rust}
+  --model            Model string (ollama/*, openrouter/*, mlx/*)
+  --max-generation   Number of evolution generations  [default: 5]
+  --num-samples      Samples per eval, -1 for all     [default: -1]
+  --num-workers      Parallel eval threads            [default: 4]
+  --parent-selection {best, latest, proportional}     [default: best]
+  --output-dir       Where to write results           [default: ./outputs_local]
+  --verbose / -v     Stream all subprocess output live
+```
+
+### Recommended run (3 terminals)
+
+**Terminal 1 — run**
+```bash
+python generate_loop_local.py \
+  --domain rust \
+  --model openrouter/google/gemma-3-4b-it:free \
+  --max-generation 8 \
+  --num-samples 20 \
+  --num-workers 3 \
+  --parent-selection best \
+  --verbose > /tmp/hyperloop.log 2>&1
+```
+
+**Terminal 2 — live log**
+```bash
+tail -f /tmp/hyperloop.log
+```
+
+**Terminal 3 — score graph**
+```bash
+watch -n3 '
+LATEST=$(ls outputs_local/ | sort | tail -1)
+echo "Run: $LATEST"
+cat outputs_local/$LATEST/archive.jsonl 2>/dev/null \
+  | python3 -c "
+import sys, json
+for line in sys.stdin:
+    r = json.loads(line)
+    bar = \"#\" * int(r.get(\"score\",0)*30)
+    print(f\"  Gen {r[\"gen\"]:>2}  {r.get(\"score\",0):.3f}  {bar}\")
+" || echo "  waiting for gen 0..."
+'
 ```
 
 ---
 
-## Usage & Configuration
+## Rust — Running the hyper loop
 
-### Parallelism
-Use `--num-workers` to speed up evaluation:
+The `rust/` directory is a native Rust port of the same evolution loop, using Rayon for parallelism and Reqwest for HTTP.
+
+### Build
+
 ```bash
-python generate_loop_local.py --domain search_arena --num-workers 8
+cd rust
+cargo build --release
+# binary: rust/target/release/hyperagents
 ```
 
-### MLX Models (Apple Silicon Macs)
-Run models natively on your GPU using `mlx-lm`:
+### Run
+
 ```bash
-python generate_loop_local.py --domain text_classify --model mlx/mlx-community/Llama-3.2-3B-Instruct-4bit
+# from repo root
+./rust/target/release/hyperagents \
+  --domain text_classify \
+  --model ollama/gemma4:e4b \
+  --max-generation 5 \
+  --num-workers 4 \
+  --verbose
+
+# or via cargo
+cd rust && cargo run --release -- \
+  --domain emotion \
+  --model ollama/qwen2.5-coder:7b \
+  --max-generation 8 \
+  --parent-selection best \
+  --verbose
 ```
 
-### Configuration (.env)
-Copy `.env.example` to `.env` to set your local Ollama URL and default model names.
+### All Rust options
+
+```
+hyperagents [OPTIONS]
+
+  --domain           {text_classify, search_arena, paper_review, emotion}
+  --model            Model string (ollama/*, openrouter/*)  [default: ollama/llama3.2]
+  --max-generation   Evolution generations                  [default: 5]
+  --num-samples      Samples per eval, -1 for all          [default: -1]
+  --num-workers      Rayon parallel threads                [default: 4]
+  --output-dir       Output directory                       [default: ./outputs_local]
+  --parent-selection {best, latest, proportional}          [default: best]
+  --verbose / -v     Verbose output
+```
+
+> **Note:** The Rust port currently supports `text_classify`, `search_arena`, `paper_review`, and `emotion` domains. The Python version additionally supports `rust` (Rust compiler-error classification).
 
 ---
 
-## Project Structure
+## Domains
+
+| Domain | Labels | Description |
+|---|---|---|
+| `text_classify` | positive / negative / neutral | Sentiment classification — good baseline |
+| `search_arena` | a / b | Which of two search responses is better |
+| `paper_review` | accept / reject / … | Academic paper outcome prediction |
+| `emotion` | joy / anger / fear / … | Emotion classification |
+| `rust` | compiles / borrow_error / type_error | Rust compile-error classification *(Python only)* |
+
+---
+
+## Reading the results
+
+All output lands in `outputs_local/run_YYYYMMDD_HHMMSS/`:
 
 ```
-├── generate_loop_local.py   # 🚀 Parallelized local runner with Tree Viz
-├── run_local_isolated.sh    # 🛡️ Safe isolated runner (macOS/Linux)
-├── run_all_benchmarks.sh    # 🎯 Multi-domain benchmark suite
+run_20260414_164911/
+├── archive.jsonl          # generation scores + lineage
+├── best_task_agent.py     # best evolved agent code
+├── gen_initial/           # baseline evaluation
+├── gen_1/
+│   ├── agent_output/
+│   │   ├── meta_agent_chat_history.md   # what the expert thought
+│   │   └── model_patch.diff             # the code change it made
+│   └── agent_evals/
+│       └── chat_history_<id>.md         # per-sample reasoning
+└── gen_2/ …
+```
+
+```bash
+# Final score summary
+cat outputs_local/$(ls outputs_local/ | sort | tail -1)/archive.jsonl
+
+# See the patch the meta agent wrote in gen 1
+cat outputs_local/$(ls outputs_local/ | sort | tail -1)/gen_1/agent_output/model_patch.diff
+
+# Read the best evolved agent
+cat outputs_local/$(ls outputs_local/ | sort | tail -1)/best_task_agent.py
+```
+
+---
+
+## Project structure
+
+```
+├── generate_loop_local.py    # 🚀 Python evolution loop (main entry point)
+├── task_agent.py             # 🔍 Task agent — CoT reasoning, evolves each gen
+├── meta_agent.py             # 🧠 Meta agent — reads code + failures, writes patch
+├── run_task_agent.py         # Run task agent standalone
+├── run_meta_agent.py         # Run meta agent standalone
 ├── agent/
-│   ├── llm.py               # LLM interface (Ollama, MLX, Cloud)
-│   └── llm_withtools.py     # Tool loop with Fuzzy JSON parsing
-├── meta_agent.py            # 🧠 Source-aware self-modification agent
-├── task_agent.py             # 🔍 CoT-enabled task-solving agent
+│   ├── llm.py                # LLM interface: Ollama / MLX / OpenRouter / Cloud
+│   ├── llm_withtools.py      # Tool-use loop + fuzzy JSON parser
+│   ├── base_agent.py         # Base class
+│   └── tools/                # Editor + Bash tools
 ├── domains/
-│   ├── text_classify/        # Simple baseline
-│   ├── search_arena/         # Search quality
-│   └── paper_review/         # Academic reasoning
-└── GEMINI.md                # 🧬 Detailed instructional context for AI agents
+│   ├── text_classify/        # Sentiment (20 train / 15 val / 15 test)
+│   ├── search_arena/         # Search quality comparison
+│   ├── paper_review/         # Academic review outcome
+│   ├── emotion/              # Emotion classification
+│   ├── rust/                 # Rust compile-error classification
+│   ├── harness.py            # Parallel evaluation harness
+│   └── report.py             # Accuracy + per-label metrics
+├── utils/
+│   ├── git_utils.py          # Git reset / clean / patch apply
+│   └── common.py             # JSON extraction helpers
+├── rust/                     # 🦀 Rust port of the evolution loop
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs           # CLI entry point
+│       ├── main_loop.rs      # Evolution loop
+│       ├── llm.rs            # HTTP LLM client
+│       ├── agent/            # Task + Meta agent
+│       ├── domains/          # Domain harness + datasets
+│       └── tools/            # Editor + Bash tools
+├── run_local_isolated.sh     # 🛡️ Safe run in temp directory (macOS/Linux)
+├── run_all_benchmarks.sh     # 🎯 Multi-domain benchmark suite
+└── .env.example              # Configuration template
 ```
+
+---
 
 ## Citation & License
-See the original [Hyperagents Paper](https://arxiv.org/abs/2603.19461) and [LICENSE.md](LICENSE.md).
+
+See the original [HyperAgents paper](https://arxiv.org/abs/2603.19461) and [LICENSE.md](LICENSE.md).
