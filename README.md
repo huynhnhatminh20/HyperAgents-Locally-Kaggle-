@@ -14,7 +14,7 @@ A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/Hyp
 |---|:---:|:---:|
 | Evolution loop (TaskAgent + MetaAgent) | ✓ `python/loop.py` | ✓ `rust/src/runner.rs` |
 | Agent-to-Agent communication loop | ✓ `python/comms/loop.py` | ✓ `rust/src/comms/` |
-| LLM client (Ollama / OpenRouter / MLX) | ✓ `python/agent/llm.py` | ✓ `rust/src/llm.rs` |
+| LLM client (Ollama / llama.cpp / OpenRouter / MLX) | ✓ `python/agent/llm.py` | ✓ `rust/src/llm.rs` |
 | Evaluation harness | ✓ `python/domains/harness.py` | ✓ `rust/src/domains/harness.rs` |
 | Domains: text_classify, emotion, factory | ✓ | ✓ |
 | Domains: rust, search_arena, paper_review | ✓ | — |
@@ -67,17 +67,48 @@ Then edit `.env` to set your model and API keys (created automatically from `.en
 ## Configuration (`.env`)
 
 ```bash
-# ── Local Ollama ──────────────────────────────────────
-OLLAMA_BASE_URL=http://localhost:11434
-MODEL_NAME=ollama/gemma4:e4b        # any model you have pulled
+# ── llama.cpp server (direct GGUF, fastest local option) ─────────────
+# Start the server first (once):
+#   llama-server -m ~/models/gemma-4-31B-it-Q4_K_M.gguf --port 8080 -c 8192 -ngl 99
+LLAMACPP_BASE_URL=http://localhost:8080
+MODEL_NAME=llamacpp/gemma-4-31B-it-Q4_K_M   # label after / is cosmetic
 
-# ── Apple Silicon (MLX) ──────────────────────────────
+# ── Local Ollama ──────────────────────────────────────────────────────
+OLLAMA_BASE_URL=http://localhost:11434
+# MODEL_NAME=ollama/gemma4:e4b
+
+# ── Apple Silicon (MLX) ───────────────────────────────────────────────
 # MODEL_NAME=mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit
 
-# ── OpenRouter (300+ models, many free) ──────────────
+# ── OpenRouter (300+ models, many free) ───────────────────────────────
 # OPENROUTER_API_KEY=sk-or-...
 # MODEL_NAME=openrouter/google/gemma-3-4b-it:free
 ```
+
+### llama.cpp quick-start
+
+```bash
+# Install llama.cpp (if not already)
+brew install llama.cpp          # macOS
+# or build from source: https://github.com/ggml-org/llama.cpp
+
+# Start server with your GGUF (loads once, stays hot)
+llama-server \
+  -m ~/models/gemma-4-31B-it-Q4_K_M.gguf \
+  --port 8080 \
+  -c 8192 \       # context window
+  -ngl 99         # GPU layers — set to 0 for CPU-only
+
+# Then run any loop command as normal:
+source venv/bin/activate
+python python/loop.py --domain factory --model llamacpp/gemma-4-31B-it-Q4_K_M
+
+# Or with the Rust binary:
+./rust/target/release/hyperagents --domain factory --model llamacpp/gemma-4-31B-it-Q4_K_M
+./rust/target/release/hyperagents-comms --task relay --model llamacpp/gemma-4-31B-it-Q4_K_M
+```
+
+> **Tip:** llama.cpp is significantly faster than Ollama for large models because it skips the Ollama daemon layer. A 31B Q4 model on Apple Silicon M-series typically runs at 15–25 tok/s.
 
 ### OpenRouter free models
 

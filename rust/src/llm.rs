@@ -46,6 +46,10 @@ impl LlmClient {
     }
 
     pub fn chat_stream(&self, messages: &[Message]) -> Result<String> {
+        // llamacpp uses the same OpenAI-compatible endpoint — no streaming needed
+        if self.model.starts_with("llamacpp/") {
+            return self.chat(messages);
+        }
         if !self.model.starts_with("ollama/") {
             return self.chat(messages);
         }
@@ -89,6 +93,8 @@ impl LlmClient {
     fn chat_once(&self, messages: &[Message]) -> Result<String> {
         if self.model.starts_with("ollama/") {
             self.chat_ollama(messages)
+        } else if self.model.starts_with("llamacpp/") {
+            self.chat_llamacpp(messages)
         } else if self.model.starts_with("anthropic/") {
             self.chat_anthropic(messages)
         } else if self.model.starts_with("openrouter/") {
@@ -96,6 +102,35 @@ impl LlmClient {
         } else {
             self.chat_openai(messages)
         }
+    }
+
+    fn chat_llamacpp(&self, messages: &[Message]) -> Result<String> {
+        let base_url = std::env::var("LLAMACPP_BASE_URL")
+            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let url = format!("{}/v1/chat/completions", base_url.trim_end_matches('/'));
+        // The model label is cosmetic — llama-server uses whatever GGUF it loaded.
+        let model_label = self.model.strip_prefix("llamacpp/").unwrap_or("local");
+
+        #[derive(Serialize)]
+        struct Req<'a> { model: &'a str, messages: &'a [Message], max_tokens: u32, temperature: f32 }
+        let body = Req { model: model_label, messages, max_tokens: 4096, temperature: 0.0 };
+
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_secs(600))
+            .build()?;
+        let response = client.post(&url).json(&body).send()
+            .map_err(|e| anyhow!("llama.cpp request failed (is llama-server running on {}?): {}", base_url, e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().unwrap_or_default();
+            return Err(anyhow!("llama.cpp returned {}: {}", status, &text[..text.len().min(500)]));
+        }
+        let val: serde_json::Value = response.json()?;
+        val.get("choices").and_then(|c| c.get(0)).and_then(|c| c.get("message"))
+            .and_then(|m| m.get("content")).and_then(|c| c.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow!("Unexpected llama.cpp response shape"))
     }
 
     fn chat_ollama(&self, messages: &[Message]) -> Result<String> {

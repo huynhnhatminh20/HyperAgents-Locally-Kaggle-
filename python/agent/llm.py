@@ -10,6 +10,12 @@ load_dotenv()
 
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096"))
 
+# --- llama.cpp server (direct GGUF, OpenAI-compatible API) ---
+# Start: llama-server -m model.gguf --port 8080 -c 8192 -ngl 99
+# Use:   MODEL_NAME=llamacpp/gemma-4-31B-it-Q4_K_M  (label after / is cosmetic)
+LLAMACPP_BASE_URL = os.environ.get("LLAMACPP_BASE_URL", "http://localhost:8080")
+LLAMACPP_GEMMA4   = "llamacpp/gemma-4-31B-it-Q4_K_M"
+
 # --- Ollama (local) models ---
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_LLAMA = "ollama/llama3.2"
@@ -137,6 +143,28 @@ def get_response_from_llm(
     ]
 
     new_msg_history = msg_history + [{"role": "user", "content": msg}]
+
+    # ----- llama.cpp server (OpenAI-compatible, no key required) -----
+    if model.startswith("llamacpp/"):
+        # The model label after "llamacpp/" is cosmetic — the server uses
+        # whatever GGUF was loaded at startup, so we just pass it as-is.
+        model_label = model.removeprefix("llamacpp/") or "local"
+        api_url = LLAMACPP_BASE_URL.rstrip("/") + "/v1/chat/completions"
+        payload = {
+            "model": model_label,
+            "messages": new_msg_history,
+            "max_tokens": min(max_tokens, 4096),
+            "temperature": temperature,
+        }
+        resp = requests.post(api_url, json=payload, timeout=600)
+        resp.raise_for_status()
+        response_text = resp.json()["choices"][0]["message"]["content"]
+        new_msg_history.append({"role": "assistant", "content": response_text})
+        new_msg_history = [
+            {**m, "text": m.pop("content")} if "content" in m else m
+            for m in new_msg_history
+        ]
+        return response_text, new_msg_history, {}
 
     # ----- MLX path (Apple Silicon local inference) -----
     if model.startswith("mlx/"):
