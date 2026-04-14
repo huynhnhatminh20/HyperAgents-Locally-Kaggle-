@@ -17,7 +17,7 @@ use runner::{Config, run};
 struct Cli {
     /// Domain to optimise
     #[arg(long, default_value = "text_classify",
-          value_parser = ["text_classify", "search_arena", "paper_review", "emotion", "factory"])]
+          value_parser = ["text_classify", "emotion", "factory"])]
     domain: String,
 
     /// Model to use (e.g. ollama/llama3.2)
