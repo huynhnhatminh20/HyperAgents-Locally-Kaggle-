@@ -80,17 +80,20 @@ MAX_TOKENS=4096
 ### Quick start (absolute paths, from anywhere)
 
 ```bash
-# Ollama (local)
+# Ollama (local) — factory domain
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
+
+# Ollama (local) — rust domain
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
 
 # OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
 # OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
 # Apple Silicon MLX
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain text_classify --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit --max-generation 5
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit --max-generation 5
 ```
 
 ### All options
@@ -98,7 +101,7 @@ cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local
 ```
 python generate_loop_local.py [OPTIONS]
 
-  --domain           {text_classify, search_arena, paper_review, rust}
+  --domain           {text_classify, search_arena, paper_review, rust, factory}
   --model            Model string (ollama/*, openrouter/*, mlx/*)
   --max-generation   Number of evolution generations  [default: 5]
   --num-samples      Samples per eval, -1 for all     [default: -1]
@@ -153,23 +156,26 @@ cargo build --release
 ### Run (absolute paths, from anywhere)
 
 ```bash
-# Ollama (local)
+# Ollama (local) — factory domain (hardest)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
+
+# Ollama (local) — emotion domain
 /Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
 
 # OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
 
 # OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
 # OpenRouter — DeepSeek R1 (free, reasoning model, num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain text_classify --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 1 --verbose
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 1 --verbose
 ```
 
 Or via cargo (cd into rust/ first):
 
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -- --domain emotion --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 3 --parent-selection best --verbose
+cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -- --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
 ```
 
 ### All Rust options
@@ -177,7 +183,7 @@ cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -
 ```
 hyperagents [OPTIONS]
 
-  --domain           {text_classify, search_arena, paper_review, emotion}
+  --domain           {text_classify, search_arena, paper_review, emotion, factory}
   --model            Model string (ollama/*, openrouter/*)  [default: ollama/llama3.2]
   --max-generation   Evolution generations                  [default: 5]
   --num-samples      Samples per eval, -1 for all          [default: -1]
@@ -187,19 +193,20 @@ hyperagents [OPTIONS]
   --verbose / -v     Verbose output
 ```
 
-> **Note:** The Rust port currently supports `text_classify`, `search_arena`, `paper_review`, and `emotion` domains. The Python version additionally supports `rust` (Rust compiler-error classification).
+> **Note:** The Rust port supports `text_classify`, `search_arena`, `paper_review`, `emotion`, and `factory` domains. The Python version additionally supports `rust` (Rust compiler-error classification).
 
 ---
 
 ## Domains
 
-| Domain | Labels | Description |
-|---|---|---|
-| `text_classify` | positive / negative / neutral | Sentiment classification — good baseline |
-| `search_arena` | a / b | Which of two search responses is better |
-| `paper_review` | accept / reject / … | Academic paper outcome prediction |
-| `emotion` | joy / anger / fear / … | Emotion classification |
-| `rust` | compiles / borrow_error / type_error | Rust compile-error classification *(Python only)* |
+| Domain | Labels | Description | Python | Rust |
+|---|---|---|:---:|:---:|
+| `text_classify` | positive / negative / neutral | Sentiment classification — good baseline | ✓ | ✓ |
+| `search_arena` | a / b | Which of two search responses is better | ✓ | ✓ |
+| `paper_review` | accept / reject / … | Academic paper outcome prediction | ✓ | ✓ |
+| `emotion` | joy / anger / fear / … | Emotion classification | ✓ | ✓ |
+| `factory` | expedite / prioritize_urgent / rebalance / batch_production / optimize_throughput | Virtual factory floor dispatch controller — 5-class, rule-based, hardest domain | ✓ | ✓ |
+| `rust` | compiles / borrow_error / type_error | Rust compile-error classification | ✓ | — |
 
 ---
 

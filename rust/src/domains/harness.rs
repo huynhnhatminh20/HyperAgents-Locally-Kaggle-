@@ -2,7 +2,7 @@ use anyhow::Result;
 use rayon::prelude::*;
 use std::path::{Path, PathBuf};
 use crate::agent::task_agent::TaskAgent;
-use crate::domains::{text_classify, emotion};
+use crate::domains::{text_classify, emotion, factory};
 
 pub fn run_harness(
     agent: &TaskAgent,
@@ -26,6 +26,11 @@ pub fn run_harness(
             let s = emotion::get_split(subset);
             (s.iter().map(|x| (x.id.clone(), x.label.clone())).collect(),
              s.iter().map(|x| emotion::format_input(x)).collect())
+        }
+        "factory" => {
+            let s = factory::get_split(subset);
+            (s.iter().map(|x| (x.id.clone(), x.label.clone())).collect(),
+             s.iter().map(|x| factory::format_input(x)).collect())
         }
         other => return Err(anyhow::anyhow!("Domain '{}' not supported", other)),
     };

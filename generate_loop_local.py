@@ -325,7 +325,7 @@ def generate_loop_local(
     print(f"{'='*60}")
 
     # --- Initial evaluation ---
-    subset = "_train" if domain in ("text_classify", "rust") else ""
+    subset = "_train" if domain in ("text_classify", "rust", "factory") else ""
     initial_score = run_initial_eval(
         project_dir, domain, model, os.path.join(output_dir, "gen_initial"),
         num_samples=num_samples, subset=subset, num_workers=num_workers,
@@ -488,7 +488,7 @@ def generate_loop_local(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HyperAgents Local Loop (Docker-free)")
     parser.add_argument("--domain", type=str, default="text_classify",
-                        choices=["text_classify", "search_arena", "paper_review", "rust"],
+                        choices=["text_classify", "search_arena", "paper_review", "rust", "factory"],
                         help="Domain to optimize on")
     parser.add_argument("--model", type=str, default=None,
                         help="Model to use (e.g., ollama/llama3.2, mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit)")

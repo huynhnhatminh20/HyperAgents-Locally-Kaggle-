@@ -18,7 +18,7 @@ use main_loop::{Config, generate_loop_local};
 struct Cli {
     /// Domain to optimise
     #[arg(long, default_value = "text_classify",
-          value_parser = ["text_classify", "search_arena", "paper_review", "emotion"])]
+          value_parser = ["text_classify", "search_arena", "paper_review", "emotion", "factory"])]
     domain: String,
 
     /// Model to use (e.g. ollama/llama3.2)
