@@ -25,6 +25,20 @@ OLLAMA_QWEN = "ollama/qwen2.5-coder"
 MLX_MODEL_PATH = os.environ.get("MLX_MODEL_PATH", "")  # optional local path override
 MLX_QWEN_OPUS = "mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit"
 
+# --- OpenRouter (cloud gateway — 300+ models, many free) ---
+# Use "openrouter/<provider>/<model>" e.g. openrouter/google/gemma-3-4b-it:free
+# Set OPENROUTER_API_KEY in .env. Free tier models end in :free.
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OR_GEMMA4_FREE    = "openrouter/google/gemma-3-4b-it:free"
+OR_GEMMA4         = "openrouter/google/gemma-3-4b-it"
+OR_LLAMA4_FREE    = "openrouter/meta-llama/llama-4-scout:free"
+OR_LLAMA4         = "openrouter/meta-llama/llama-4-scout"
+OR_QWEN3_FREE     = "openrouter/qwen/qwen3-8b:free"
+OR_DEEPSEEK_FREE  = "openrouter/deepseek/deepseek-r1-0528:free"
+OR_CLAUDE_SONNET  = "openrouter/anthropic/claude-sonnet-4-5"
+OR_GPT4O          = "openrouter/openai/gpt-4o"
+
 # --- Cloud models (original) ---
 CLAUDE_MODEL = "anthropic/claude-sonnet-4-5-20250929"
 CLAUDE_HAIKU_MODEL = "anthropic/claude-3-haiku-20240307"
@@ -145,9 +159,12 @@ def get_response_from_llm(
         "messages": new_msg_history,
     }
 
-    # Set api_base for Ollama models
+    # Set api_base / api_key for Ollama and OpenRouter
     if model.startswith("ollama/") or model.startswith("ollama_chat/"):
         completion_kwargs["api_base"] = OLLAMA_BASE_URL
+    elif model.startswith("openrouter/"):
+        completion_kwargs["api_base"] = OPENROUTER_BASE_URL
+        completion_kwargs["api_key"] = OPENROUTER_API_KEY
 
     # GPT-5 and GPT-5-mini only support default temperature (1), skip it
     # GPT-5.2 supports temperature
@@ -199,6 +216,9 @@ if __name__ == "__main__":
     #     ("CLAUDE_MODEL", CLAUDE_MODEL),
     #     ("OPENAI_MODEL", OPENAI_MODEL),
     #     ("MLX_QWEN_OPUS", MLX_QWEN_OPUS),
+    #     ("OR_GEMMA4_FREE", OR_GEMMA4_FREE),
+    #     ("OR_LLAMA4_FREE", OR_LLAMA4_FREE),
+    #     ("OR_QWEN3_FREE", OR_QWEN3_FREE),
     # ]
     # for name, model in models:
     #     print(f"\n{'='*50}")
@@ -209,3 +229,12 @@ if __name__ == "__main__":
     #         print(f"OK: {output_msg[:100]}...")
     #     except Exception as e:
     #         print(f"FAIL: {str(e)[:200]}")
+
+    # Quick OpenRouter test (requires OPENROUTER_API_KEY in .env):
+    # if OPENROUTER_API_KEY:
+    #     print(f"\nTesting OpenRouter free tier: {OR_GEMMA4_FREE}")
+    #     try:
+    #         output_msg, _, _ = get_response_from_llm(msg, model=OR_GEMMA4_FREE)
+    #         print(f"OK: {output_msg[:200]}...")
+    #     except Exception as e:
+    #         print(f"FAIL: {str(e)[:300]}")
