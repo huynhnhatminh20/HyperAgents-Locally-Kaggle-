@@ -83,6 +83,8 @@ impl LlmClient {
             self.chat_ollama(messages)
         } else if self.model.starts_with("anthropic/") {
             self.chat_anthropic(messages)
+        } else if self.model.starts_with("openrouter/") {
+            self.chat_openrouter(messages)
         } else {
             self.chat_openai(messages)
         }
@@ -130,6 +132,32 @@ impl LlmClient {
             .and_then(|m| m.get("content")).and_then(|c| c.as_str())
             .map(|s| s.to_string())
             .ok_or_else(|| anyhow!("Unexpected OpenAI response shape"))
+    }
+
+    fn chat_openrouter(&self, messages: &[Message]) -> Result<String> {
+        let api_key = std::env::var("OPENROUTER_API_KEY")
+            .map_err(|_| anyhow!("OPENROUTER_API_KEY not set"))?;
+        let model_name = self.model.strip_prefix("openrouter/").unwrap_or(&self.model);
+        #[derive(Serialize)]
+        struct Req<'a> { model: &'a str, messages: &'a [Message], max_tokens: u32 }
+        let body = Req { model: model_name, messages, max_tokens: 4096 };
+        let client = reqwest::blocking::Client::builder().timeout(Duration::from_secs(300)).build()?;
+        let response = client
+            .post("https://openrouter.ai/api/v1/chat/completions")
+            .bearer_auth(&api_key)
+            .json(&body)
+            .send()
+            .map_err(|e| anyhow!("OpenRouter request failed: {}", e))?;
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().unwrap_or_default();
+            return Err(anyhow!("OpenRouter returned {}: {}", status, &text[..text.len().min(500)]));
+        }
+        let val: serde_json::Value = response.json()?;
+        val.get("choices").and_then(|c| c.get(0)).and_then(|c| c.get("message"))
+            .and_then(|m| m.get("content")).and_then(|c| c.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| anyhow!("Unexpected OpenRouter response shape"))
     }
 
     fn chat_anthropic(&self, messages: &[Message]) -> Result<String> {
