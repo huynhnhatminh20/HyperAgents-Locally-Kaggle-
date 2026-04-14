@@ -7,6 +7,10 @@ edition = "2021"
 name = "hyperagents"
 path = "src/main.rs"
 
+[[bin]]
+name = "hyperagents-comms"
+path = "src/comms_main.rs"
+
 [dependencies]
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 serde = { version = "1", features = ["derive"] }

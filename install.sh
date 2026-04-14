@@ -88,6 +88,10 @@ if [ "$BUILD_RUST" -eq 1 ] && command -v cargo &>/dev/null; then
 echo "  Run Rust evolution loop:"
 echo "    ./rust/target/release/hyperagents --domain factory --model ollama/gemma4:e4b --max-generation 8 --verbose"
 echo ""
+echo "  Run Rust communication loop:"
+echo "    ./rust/target/release/hyperagents-comms --task relay --model ollama/gemma4:e4b"
+echo "    ./rust/target/release/hyperagents-comms --task protocol --rounds 5"
+echo ""
 fi
 echo "  Domains: text_classify  emotion  rust  factory  search_arena  paper_review"
 echo "  Edit .env to configure your model and API keys."

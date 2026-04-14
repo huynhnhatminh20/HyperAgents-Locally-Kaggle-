@@ -8,6 +8,24 @@ A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/Hyp
 
 ---
 
+## Language map
+
+| Feature | Python | Rust |
+|---|:---:|:---:|
+| Evolution loop (TaskAgent + MetaAgent) | ✓ `python/loop.py` | ✓ `rust/src/runner.rs` |
+| Agent-to-Agent communication loop | ✓ `python/comms/loop.py` | ✓ `rust/src/comms/` |
+| LLM client (Ollama / OpenRouter / MLX) | ✓ `python/agent/llm.py` | ✓ `rust/src/llm.rs` |
+| Evaluation harness | ✓ `python/domains/harness.py` | ✓ `rust/src/domains/harness.rs` |
+| Domains: text_classify, emotion, factory | ✓ | ✓ |
+| Domains: rust, search_arena, paper_review | ✓ | — |
+| Apple Silicon MLX support | ✓ (`--mlx`) | — |
+
+**Binaries built by `bash install.sh --rust`:**
+- `rust/target/release/hyperagents` — evolution loop
+- `rust/target/release/hyperagents-comms` — agent communication loop
+
+---
+
 ## How it works
 
 ```
@@ -203,6 +221,34 @@ python python/comms/loop.py [OPTIONS]
 ```
 
 Output is saved to `outputs_comms/comms_<task>_<timestamp>/session.json`.
+
+### Rust — Agent communication loop
+
+The same communication loop is also compiled as a native Rust binary.
+
+```bash
+# Build (included in install.sh --rust)
+cd rust && cargo build --release
+
+# Relay — agents relay a project brief, improving each round
+./rust/target/release/hyperagents-comms --task relay --model ollama/llama3.2
+
+# Collaborative puzzle — 3 rounds
+./rust/target/release/hyperagents-comms --task collaborate --rounds 3
+
+# Protocol compression — 5 rounds, agents develop shorthand
+./rust/target/release/hyperagents-comms --task protocol --rounds 5
+
+# Free discussion
+./rust/target/release/hyperagents-comms --task free --topic "what makes a good abstraction?"
+
+# Split models — small agents, smarter overseer
+./rust/target/release/hyperagents-comms --task relay \
+  --agent-model ollama/llama3.2 \
+  --overseer-model openrouter/google/gemma-3-4b-it:free
+```
+
+All options mirror the Python version (`--task`, `--model`, `--agent-model`, `--overseer-model`, `--rounds`, `--exchanges`, `--scenario`, `--topic`, `--output-dir`).
 
 ---
 
