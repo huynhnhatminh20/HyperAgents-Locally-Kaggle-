@@ -66,7 +66,6 @@ def diff_versus_commit(git_dname, commit):
         if should_ignore_diff_path(file):
             continue
         # Diff untracked file against /dev/null (empty file)
-        file_path = os.path.join(git_dname, file)
         devnull = '/dev/null'
         if os.name == 'nt':  # Handle Windows
             devnull = 'NUL'

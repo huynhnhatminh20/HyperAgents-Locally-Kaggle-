@@ -11,9 +11,10 @@ import time
 from datetime import datetime
 
 from dotenv import load_dotenv
-load_dotenv()  # load .env into os.environ before spawning any subprocesses
 
-from utils.common import file_exist_and_not_empty, load_json_file
+from utils.common import file_exist_and_not_empty
+
+load_dotenv()  # load .env into os.environ before spawning any subprocesses
 
 # Global verbose flag
 VERBOSE = False
@@ -177,14 +178,15 @@ def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, it
         try:
             with open(patch_file) as f:
                 patch_content = f.read()
-            lines_changed = len([l for l in patch_content.splitlines() if l.startswith('+') or l.startswith('-')])
+            lines_changed = len([line for line in patch_content.splitlines() if line.startswith('+') or line.startswith('-')])
+
             print(f"  Patch: {lines_changed} lines changed")
-            print(f"  ┌─── patch preview ───")
+            print("  ┌─── patch preview ───")
             for line in patch_content.splitlines()[:30]:
                 print(f"  │ {line}")
             if patch_content.count('\n') > 30:
                 print(f"  │ ... ({patch_content.count(chr(10)) - 30} more lines)")
-            print(f"  └─────────────────────")
+            print("  └─────────────────────")
         except Exception:
             pass
 
@@ -261,7 +263,7 @@ def print_evolution_tree(archive):
             adj[pid] = []
         adj[pid].append(str(a["id"]))
 
-    print(f"\n🌱 Evolution Tree:")
+    print("\n🌱 Evolution Tree:")
 
     def print_node(node_id, prefix="", is_last=True):
         entry = nodes.get(node_id)
@@ -316,7 +318,7 @@ def generate_loop_local(
     archive_file = os.path.join(output_dir, "archive.jsonl")
 
     print(f"{'='*60}")
-    print(f"HyperAgents Local Loop")
+    print("HyperAgents Local Loop")
     print(f"  Model:      {model}")
     print(f"  Domain:     {domain}")
     print(f"  Gens:       {max_generation}")
@@ -410,7 +412,7 @@ def generate_loop_local(
                     num_workers=num_workers,
                 )
         else:
-            print(f"  Meta agent failed, skipping evaluation.")
+            print("  Meta agent failed, skipping evaluation.")
 
         # Store in archive
         entry = {
@@ -450,7 +452,7 @@ def generate_loop_local(
 
     # --- Summary ---
     print(f"\n{'='*60}")
-    print(f"RESULTS SUMMARY")
+    print("RESULTS SUMMARY")
     print(f"{'='*60}")
     for entry in archive:
         marker = " ⭐" if entry.get("score") == max(
