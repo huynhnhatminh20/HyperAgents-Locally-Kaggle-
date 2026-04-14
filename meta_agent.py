@@ -16,74 +16,129 @@ class MetaAgent(AgentSystem):
         import os
         import json
 
+        # ── Evaluation feedback ───────────────────────────────────────────────
         feedback_summary = ""
-        # Look for the most recent report in the eval_path
+        report_data = None
         if os.path.exists(eval_path):
             reports = []
             for root, dirs, files in os.walk(eval_path):
                 if "report.json" in files:
                     reports.append(os.path.join(root, "report.json"))
-
             if reports:
-                # Sort by modification time to get the latest
                 latest_report_path = max(reports, key=os.path.getmtime)
                 try:
                     with open(latest_report_path, "r") as f:
                         report_data = json.load(f)
                     score = report_data.get("overall_accuracy", "N/A")
-                    feedback_summary = f"\nLatest Evaluation Score: {score}\nReport details: {json.dumps(report_data, indent=2)[:2000]}"
+                    feedback_summary = (
+                        f"\n## Latest Evaluation Score: {score}\n"
+                        f"Report details:\n```json\n{json.dumps(report_data, indent=2)[:2000]}\n```"
+                    )
                 except Exception as e:
                     feedback_summary = f"\n(Error reading latest report: {e})"
 
-        # Provide the current source of task_agent.py for immediate context
-        task_agent_source = ""
-        task_agent_path = os.path.join(repo_path, "task_agent.py")
-        if os.path.exists(task_agent_path):
-            try:
-                with open(task_agent_path, "r") as f:
-                    task_agent_source = f"\n\nCurrent `task_agent.py` source:\n```python\n{f.read()}\n```"
-            except Exception as e:
-                task_agent_source = f"\n(Error reading task_agent.py: {e})"
+        # ── Patch history (what the meta agent already tried) ─────────────────
+        patch_history_summary = ""
+        if os.path.exists(eval_path):
+            patches = []
+            for root, dirs, files in os.walk(eval_path):
+                if "model_patch.diff" in files:
+                    patch_path = os.path.join(root, "model_patch.diff")
+                    if os.path.getsize(patch_path) > 0:
+                        patches.append(patch_path)
+            if patches:
+                patches.sort(key=os.path.getmtime)
+                # Show the last 3 non-empty patches
+                recent = patches[-3:]
+                history_parts = []
+                for p in recent:
+                    try:
+                        with open(p) as f:
+                            diff = f.read(3000)
+                        gen_label = os.path.basename(os.path.dirname(os.path.dirname(p)))
+                        history_parts.append(
+                            f"### Patch from {gen_label}:\n```diff\n{diff}\n```"
+                        )
+                    except Exception:
+                        pass
+                if history_parts:
+                    patch_history_summary = (
+                        "\n## Previous Patches (already tried — don't repeat these):\n"
+                        + "\n".join(history_parts)
+                    )
 
-        # Identify domain and provide dataset context if possible
+        # ── Domain dataset context ────────────────────────────────────────────
         domain_context = ""
-        if "report_data" in locals():
+        if report_data:
             domain = report_data.get("domain", "unknown")
             dataset_path = os.path.join(repo_path, "domains", domain, "dataset.py")
             if os.path.exists(dataset_path):
                 try:
-                    with open(dataset_path, "r") as f:
-                        domain_context = f"\n\nDomain Dataset (`{domain}`):\n```python\n{f.read()[:3000]}\n```"
+                    with open(dataset_path) as f:
+                        domain_context = (
+                            f"\n## Domain Dataset (`{domain}`):\n```python\n{f.read()[:3000]}\n```"
+                        )
                 except Exception:
                     pass
 
+        # ── Current task_agent.py source ─────────────────────────────────────
+        task_agent_source = ""
+        task_agent_path = os.path.join(repo_path, "task_agent.py")
+        if os.path.exists(task_agent_path):
+            try:
+                with open(task_agent_path) as f:
+                    src = f.read()
+                task_agent_source = (
+                    f"\n## Current `task_agent.py`:\n```python\n{src}\n```"
+                )
+            except Exception as e:
+                task_agent_source = f"\n(Error reading task_agent.py: {e})"
+
+        # ── Instruction ───────────────────────────────────────────────────────
+        iters = iterations_left if iterations_left is not None else "unknown"
         instruction = (
-            f"You are a Meta-Agent responsible for self-improving the `TaskAgent`. "
-            f"Modify the codebase at `{repo_path}` to achieve a higher evaluation score. "
-            f"You have {iterations_left if iterations_left is not None else 'unknown'} iterations left."
+            f"You are a Meta-Agent responsible for self-improving the `TaskAgent`.\n"
+            f"You have {iters} iteration(s) left. Maximise the evaluation score.\n"
             f"{feedback_summary}"
+            f"{patch_history_summary}"
             f"{domain_context}"
             f"{task_agent_source}\n\n"
-            "CRITICAL RULES:\n"
-            f"1. ONLY modify `task_agent.py` at `{os.path.join(repo_path, 'task_agent.py')}`.\n"
-            "2. NEVER delete the repository or run 'rm -rf'.\n"
-            "3. Use the `editor` tool with the `str_replace` command to fix the logic.\n\n"
-            "GOLDEN EXAMPLE OF A TOOL CALL:\n"
+            "## Rules\n"
+            f"1. ONLY modify `task_agent.py` at: `{task_agent_path}`\n"
+            "2. Do NOT delete the repository or run destructive commands.\n"
+            "3. Your edit MUST produce valid Python — a syntax check runs after your tool call.\n"
+            "4. Do NOT repeat patches already shown above.\n\n"
+            "## How to edit\n"
+            "Prefer surgical `str_replace` when only a small section changes:\n"
             "<json>\n"
             "{\n"
-            "  \"tool_name\": \"editor\",\n"
-            "  \"tool_input\": {\n"
-            "    \"command\": \"str_replace\",\n"
-            f"    \"path\": \"{os.path.join(repo_path, 'task_agent.py')}\",\n"
-            "    \"old_str\": \"# original code line\",\n"
-            "    \"new_str\": \"# improved code line\"\n"
+            '  "tool_name": "editor",\n'
+            '  "tool_input": {\n'
+            '    "command": "str_replace",\n'
+            f'    "path": "{task_agent_path}",\n'
+            '    "old_str": "exact existing text (must be unique in the file)",\n'
+            '    "new_str": "replacement text"\n'
             "  }\n"
             "}\n"
             "</json>\n\n"
-            "STRATEGY:\n"
-            "1. Study the Domain Dataset to understand labels.\n"
-            "2. Analyze failure cases in the report.\n"
-            "3. rewrite `task_agent.py` to include better instructions or specific hardcoded rules for failing examples."
+            "Use `create` only when you want to rewrite the whole file:\n"
+            "<json>\n"
+            "{\n"
+            '  "tool_name": "editor",\n'
+            '  "tool_input": {\n'
+            '    "command": "create",\n'
+            f'    "path": "{task_agent_path}",\n'
+            '    "file_text": "...complete new Python source as a plain string..."\n'
+            "  }\n"
+            "}\n"
+            "</json>\n\n"
+            "Study the score and failure cases, then make ONE targeted improvement."
         )
 
-        new_msg_history = chat_with_agent(instruction, model=self.model, msg_history=[], logging=self.log, tools_available='all')
+        chat_with_agent(
+            instruction,
+            model=self.model,
+            msg_history=[],
+            logging=self.log,
+            tools_available='all',
+        )

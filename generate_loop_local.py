@@ -322,7 +322,7 @@ def generate_loop_local(
     print(f"{'='*60}")
 
     # --- Initial evaluation ---
-    subset = "_train" if domain == "text_classify" else ""
+    subset = "_train" if domain in ("text_classify", "rust") else ""
     initial_score = run_initial_eval(
         project_dir, domain, model, os.path.join(output_dir, "gen_initial"),
         num_samples=num_samples, subset=subset, num_workers=num_workers,
@@ -356,7 +356,7 @@ def generate_loop_local(
 
         # Apply parent diffs (lineage)
         parent_entry = next((a for a in archive if a["id"] == parent_id), None)
-        if parent_entry and "patch_file" in parent_entry:
+        if parent_entry and parent_entry.get("patch_file"):
             parent_patch_applied = git_apply_diff(project_dir, parent_entry["patch_file"])
             if not parent_patch_applied:
                 print(f"  Parent patch failed to apply, skipping generation {gen_id}.")
@@ -485,7 +485,7 @@ def generate_loop_local(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="HyperAgents Local Loop (Docker-free)")
     parser.add_argument("--domain", type=str, default="text_classify",
-                        choices=["text_classify", "search_arena", "paper_review"],
+                        choices=["text_classify", "search_arena", "paper_review", "rust"],
                         help="Domain to optimize on")
     parser.add_argument("--model", type=str, default=None,
                         help="Model to use (e.g., ollama/llama3.2, mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit)")

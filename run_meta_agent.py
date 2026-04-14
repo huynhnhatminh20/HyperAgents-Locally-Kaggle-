@@ -1,5 +1,7 @@
 import argparse
+import ast
 import os
+import sys
 
 from agent.llm import DEFAULT_MODEL
 from meta_agent import MetaAgent
@@ -58,6 +60,22 @@ def main():
         iterations_left=args.iterations_left,
     )
 
+    # Syntax-check task_agent.py before accepting the patch
+    task_agent_path = os.path.join(args.repo_path, "task_agent.py")
+    if os.path.exists(task_agent_path):
+        try:
+            with open(task_agent_path) as f:
+                source = f.read()
+            ast.parse(source)
+            print("[syntax-check] task_agent.py: OK")
+        except SyntaxError as e:
+            print(f"[syntax-check] task_agent.py: SYNTAX ERROR — {e}")
+            print("  The meta agent produced invalid Python. Patch will be empty.")
+            # Restore the file so the diff is clean
+            reset_paths_to_commit(
+                git_dname=args.git_dir, commit=args.base_commit, paths=["task_agent.py"]
+            )
+
     # Reset unwanted diffs
     reset_paths_to_commit(
         git_dname=args.git_dir, commit=args.base_commit, paths=["domains/"]
@@ -70,6 +88,8 @@ def main():
         if args.outdir
         else "model_patch.diff"
     )
+    if args.outdir:
+        os.makedirs(args.outdir, exist_ok=True)
     with open(model_patch_outfile, "w") as f:
         f.write(model_patch)
 
