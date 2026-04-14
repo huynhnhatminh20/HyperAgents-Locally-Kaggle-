@@ -1,4 +1,4 @@
-# 🧬 HyperAgents-Ollama
+# 🧬 HyperAgents-Ollama (Proposed: **Recurse-Local** 🌀)
 
 **Self-Improving AI Agents — Local, Cloud, or Free**
 
@@ -8,7 +8,90 @@ A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/Hyp
 
 ---
 
-## How it works
+## 🌀 How it Works: The Meta-Loop
+
+The core of the project is a self-referential cycle where the agent literally rewrites its own brain to become better at a specific task.
+
+### 1. The Evolution Cycle
+```mermaid
+graph TD
+    subgraph "Generation N"
+        A[Task Agent vN] -->|Solve Tasks| B(Evaluation Harness)
+        B -->|Report: Accuracy + Failures| C{Score > Best?}
+        C -->|Yes| D[New Champion]
+        C -->|No| E[Discard / Re-try]
+    end
+    
+    subgraph "Self-Modification (Meta Agent)"
+        F[Meta Agent] -->|Reads| G[Task Agent Source Code]
+        F -->|Analyzes| B
+        F -->|Writes| H[Python/Rust Code Patch]
+        H -->|Applies Git Diff| I[Task Agent vN+1]
+    end
+    
+    I --> A
+    D -->|Parent| F
+```
+
+### 3. Lineage Tree (Example)
+The system maintains a "Tree of Life" for your agents. Only the strongest versions survive to seed the next generation.
+
+```mermaid
+graph TD
+    v0[v0: Baseline - 62%] --> v1a[v1a: Improved Prompts - 68%]
+    v0 --> v1b[v1b: Added Few-Shot - 71%]
+    v1b --> v2a[v2a: Chain-of-Thought - 79%]
+    v1b --> v2b[v2b: Hardcoded Rules - 74%]
+    v2a --> v3[v3: Hybrid Logic - 88% ⭐]
+```
+
+### 2. System Architecture
+```mermaid
+graph LR
+    subgraph "Execution Layer"
+        Loop[Evolution Loop]
+        Harness[Eval Harness]
+    end
+
+    subgraph "Agent Layer"
+        Task[Task Agent]
+        Meta[Meta Agent]
+    end
+
+    subgraph "Backend (Local First)"
+        Ollama[Ollama]
+        MLX[MLX-LM]
+        OpenRouter[OpenRouter]
+    end
+
+    Loop --> Task
+    Loop --> Meta
+    Task --> Harness
+    Task --- Backend
+    Meta --- Backend
+    
+    Backend --- Ollama
+    Backend --- MLX
+    Backend --- OpenRouter
+```
+
+---
+
+## 🏷️ Rebranding Research
+
+We are looking for a new name that captures the **Local** and **Recursive** nature of the framework. Here are some candidates:
+
+| Name | Theme | Why it works |
+|---|---|---|
+| **Recurse** | Technical | Directly describes the self-referential code-writing loop. |
+| **Ouro** | Mythological | Short for Ouroboros (the snake eating its tail), a symbol of recursion. |
+| **Helix** | Biological | Represents the DNA-like code structure and evolution. |
+| **Forge-Local** | Industrial | Focuses on the "Forging" of better agents on your own hardware. |
+| **Loom** | Craft | Weaving better logic into the agent's source code. |
+
+---
+
+## How it works (Original)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
