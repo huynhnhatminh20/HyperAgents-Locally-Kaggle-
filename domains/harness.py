@@ -28,6 +28,16 @@ def get_dataset(domain, subset=""):
         data = get_split(split)
         df = pd.DataFrame(data)
         return df
+    if domain == "rust":
+        from domains.rust.dataset import get_split
+        split = "train"
+        for s in ["train", "val", "test"]:
+            if s in subset:
+                split = s
+                break
+        data = get_split(split)
+        df = pd.DataFrame(data)
+        return df
     if "imo_" in domain:
         df = pd.read_csv(f"./domains/imo/{domain.split('_')[-1]}bench{subset}.csv", dtype=str)
     elif domain in ["search_arena", "paper_review"]:
@@ -200,6 +210,7 @@ if __name__ == "__main__":
             "imo_proof",
             "imo_proof_grading",  # To grade generated proofs with an agent
             "text_classify",
+            "rust",
         ],
         required=True,
         help="Domain to evaluate",
@@ -236,7 +247,7 @@ if __name__ == "__main__":
         parser.error("--proofs_dname is required when domain is 'imo_proof_grading'")
 
     # Human preferences domains
-    if domain in ["search_arena", "paper_review", "imo_grading", "imo_proof", "imo_proof_grading", "text_classify"]:
+    if domain in ["search_arena", "paper_review", "imo_grading", "imo_proof", "imo_proof_grading", "text_classify", "rust"]:
         output_folder = harness(
             agent_path=args.agent_path,
             output_dir=args.output_dir,

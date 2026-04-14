@@ -175,6 +175,7 @@ if __name__ == "__main__":
             "imo_grading",
             "imo_proof",
             "text_classify",
+            "rust",
         ],
         required=True,
         help="Domain to evaluate",
@@ -185,7 +186,7 @@ if __name__ == "__main__":
     domain = args.domain
 
     # Human preferences domains
-    if domain in ["search_arena", "paper_review", "imo_grading", "text_classify"]:
+    if domain in ["search_arena", "paper_review", "imo_grading", "text_classify", "rust"]:
         report(dname=args.dname, domain=args.domain)
 
     elif domain == "imo_proof":

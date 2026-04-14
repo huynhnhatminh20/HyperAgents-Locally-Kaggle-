@@ -61,7 +61,7 @@ Respond in JSON format:
                 data = extracted_jsons[-1]
                 prediction = data.get('response', 'None')
                 reasoning = data.get('reasoning', 'No reasoning provided')
-                thought_log.log(f"LLM Reasoning: {reasoning}")
+                thought_log.log(f"LLM Reasoning: {reasoning.strip()}\n")
         except Exception as e:
             self.log(f"Error extracting prediction: {e}")
             prediction = "None"
