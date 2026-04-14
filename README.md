@@ -77,22 +77,38 @@ MAX_TOKENS=4096
 
 ## Python — Running the hyper loop
 
-### Quick start
+### Quick start (absolute paths, from anywhere)
 
 ```bash
 # Ollama (local)
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && \
 python generate_loop_local.py \
-  --domain text_classify \
+  --domain rust \
   --model ollama/gemma4:e4b \
-  --max-generation 5
+  --max-generation 8 \
+  --num-workers 3 \
+  --verbose
 
-# OpenRouter (cloud, free tier)
+# OpenRouter — Gemma 3 4B (free)
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && \
 python generate_loop_local.py \
   --domain rust \
   --model openrouter/google/gemma-3-4b-it:free \
-  --max-generation 8
+  --max-generation 8 \
+  --num-workers 3 \
+  --verbose
+
+# OpenRouter — Qwen3 8B (free)
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && \
+python generate_loop_local.py \
+  --domain rust \
+  --model openrouter/qwen/qwen3-8b:free \
+  --max-generation 8 \
+  --num-workers 3 \
+  --verbose
 
 # Apple Silicon MLX
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && \
 python generate_loop_local.py \
   --domain text_classify \
   --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit \
@@ -158,34 +174,59 @@ The `rust/` directory is a native Rust port of the same evolution loop, using Ra
 ### Build
 
 ```bash
-cd rust
+cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust
 cargo build --release
-# binary: rust/target/release/hyperagents
+# binary lands at: rust/target/release/hyperagents
 ```
 
-### Run
+### Run (absolute paths, from anywhere)
 
 ```bash
-# Always run from the HyperAgents-Ollama repo root:
-cd /path/to/HyperAgents-Ollama
-
-./rust/target/release/hyperagents \
-  --domain text_classify \
-  --model ollama/gemma4:e4b \
-  --max-generation 5 \
-  --num-workers 4 \
-  --verbose
-```
-
-Or run via cargo (must be inside `HyperAgents-Ollama/rust/`):
-
-```bash
-cd /path/to/HyperAgents-Ollama/rust
-
-cargo run --release -- \
+# Ollama (local)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents \
   --domain emotion \
   --model ollama/qwen2.5-coder:7b \
   --max-generation 8 \
+  --num-workers 4 \
+  --parent-selection best \
+  --verbose
+
+# OpenRouter — Gemma 3 4B (free)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents \
+  --domain emotion \
+  --model openrouter/google/gemma-3-4b-it:free \
+  --max-generation 8 \
+  --num-workers 3 \
+  --parent-selection best \
+  --verbose
+
+# OpenRouter — Qwen3 8B (free)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents \
+  --domain text_classify \
+  --model openrouter/qwen/qwen3-8b:free \
+  --max-generation 8 \
+  --num-workers 3 \
+  --verbose
+
+# OpenRouter — DeepSeek R1 (free, reasoning model)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents \
+  --domain text_classify \
+  --model openrouter/deepseek/deepseek-r1-0528:free \
+  --max-generation 5 \
+  --num-workers 2 \
+  --verbose
+```
+
+Or via cargo (must cd into the rust/ subdirectory first):
+
+```bash
+cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust
+
+cargo run --release -- \
+  --domain emotion \
+  --model openrouter/google/gemma-3-4b-it:free \
+  --max-generation 8 \
+  --num-workers 3 \
   --parent-selection best \
   --verbose
 ```
