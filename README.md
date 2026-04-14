@@ -133,6 +133,79 @@ for line in sys.stdin:
 
 ---
 
+## Agent-to-Agent Communication Loop
+
+A second mode where two AI agents exchange messages to complete a task as efficiently as possible, coached in real time by a third **Overseer** agent that scores each round and gives specific tips.
+
+```
+Round 1:  Agent A ──────────────────────────────────► Agent B
+          (verbose, hedging, redundant)
+                                 ◄──────────────────── Agent B
+                            Overseer: score 4/10 — tips for both agents
+
+Round 2:  Agent A ───────────────────────────────────► Agent B
+          (tighter, using agreed shorthand)
+                                  ◄────────────────── Agent B
+                            Overseer: score 7/10 ↑ — further tips
+
+Round N:  maximum signal / minimum words
+```
+
+### Tasks
+
+| Task | Description |
+|---|---|
+| `relay` | A has a dense fact-sheet; must relay it to B in as few words as possible. Overseer quizzes B. |
+| `collaborate` | Each agent has half the data. Must combine efficiently to produce a joint answer. |
+| `protocol` | Repeated relay rounds with fresh data — agents develop compressed notation / shorthand over time. |
+| `free` | Open discussion on a topic; overseer coaches for information density. |
+
+### Run
+
+```bash
+source venv/bin/activate
+
+# Relay (default) — 4 rounds, agents find efficient briefing style
+python python/comms/loop.py --task relay --model ollama/llama3.2
+
+# Collaborative puzzle — 3 rounds
+python python/comms/loop.py --task collaborate --rounds 3
+
+# Protocol compression — 5 rounds, agents develop shorthand
+python python/comms/loop.py --task protocol --rounds 5
+
+# Free discussion (random topic)
+python python/comms/loop.py --task free
+
+# Custom topic
+python python/comms/loop.py --task free --topic "trade-offs in distributed systems"
+
+# Different models for agents vs overseer
+python python/comms/loop.py --task relay \
+  --agent-model ollama/llama3.2 \
+  --overseer-model openrouter/google/gemma-3-4b-it:free
+```
+
+### All options
+
+```
+python python/comms/loop.py [OPTIONS]
+
+  --task              {relay, collaborate, protocol, free}  [default: relay]
+  --model             Model for all three agents
+  --agent-model       Override model for Agent A and B only
+  --overseer-model    Override model for the Overseer only
+  --rounds            Number of rounds              [default: task-specific]
+  --exchanges         Exchanges per round           [default: task-specific]
+  --scenario          Scenario index (0-based)      [default: 0]
+  --topic             Discussion topic (free task)
+  --output-dir        Output directory              [default: ./outputs_comms]
+```
+
+Output is saved to `outputs_comms/comms_<task>_<timestamp>/session.json`.
+
+---
+
 ## Rust — Running the hyper loop
 
 ### Build
@@ -248,10 +321,14 @@ cat outputs_local/$(ls outputs_local/ | sort | tail -1)/best_task_agent.py
 │   │   ├── paper_review/     # Academic review outcome (CSV)
 │   │   ├── harness.py        # Parallel evaluation harness
 │   │   └── report.py         # Accuracy + per-label metrics
-│   └── utils/
-│       ├── git_utils.py      # Git reset / clean / patch apply
-│       ├── common.py         # JSON extraction helpers
-│       └── thread_logger.py  # Thread-safe file logging
+│   ├── utils/
+│   │   ├── git_utils.py      # Git reset / clean / patch apply
+│   │   ├── common.py         # JSON extraction helpers
+│   │   └── thread_logger.py  # Thread-safe file logging
+│   └── comms/
+│       ├── loop.py           # Agent-to-agent comms loop — main entry point
+│       ├── agents.py         # CommunicatingAgent + OverseerAgent
+│       └── tasks.py          # Task definitions (relay, collaborate, protocol, free)
 └── rust/                     # Rust port of the evolution loop
     ├── Cargo.toml
     └── src/
