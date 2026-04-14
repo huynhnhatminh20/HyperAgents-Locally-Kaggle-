@@ -19,7 +19,7 @@ impl LlmClient {
     }
 
     pub fn chat(&self, messages: &[Message]) -> Result<String> {
-        let max_retries = 3;
+        let max_retries = 8;
         let mut delay_secs = 2u64;
         for attempt in 0..max_retries {
             match self.chat_once(messages) {
@@ -28,9 +28,17 @@ impl LlmClient {
                     if attempt + 1 == max_retries {
                         return Err(e);
                     }
-                    eprintln!("  [LLM] attempt {} failed: {}. Retrying in {}s", attempt + 1, e, delay_secs);
-                    std::thread::sleep(Duration::from_secs(delay_secs));
-                    delay_secs *= 2;
+                    // Parse "retry after Ns" from rate-limit errors and wait that long
+                    let wait = if let Some(pos) = e.to_string().find("retry after ") {
+                        let rest = &e.to_string()[pos + 12..];
+                        rest.split('s').next().and_then(|s| s.trim().parse::<u64>().ok())
+                            .unwrap_or(delay_secs)
+                    } else {
+                        delay_secs
+                    };
+                    eprintln!("  [LLM] attempt {} failed: {}. Retrying in {}s", attempt + 1, e, wait);
+                    std::thread::sleep(Duration::from_secs(wait));
+                    delay_secs = (delay_secs * 2).min(60);
                 }
             }
         }
@@ -138,9 +146,32 @@ impl LlmClient {
         let api_key = std::env::var("OPENROUTER_API_KEY")
             .map_err(|_| anyhow!("OPENROUTER_API_KEY not set"))?;
         let model_name = self.model.strip_prefix("openrouter/").unwrap_or(&self.model);
+
+        // Many free models (Gemma, etc.) reject the system role — fold any system
+        // message into the first user message so every model works uniformly.
+        let merged: Vec<Message> = {
+            let mut out: Vec<Message> = Vec::new();
+            let mut system_prefix = String::new();
+            for m in messages {
+                if m.role == "system" {
+                    system_prefix = format!("{}\n\n", m.content.trim());
+                } else {
+                    let content = if !system_prefix.is_empty() && out.is_empty() {
+                        let c = format!("{}{}", system_prefix, m.content);
+                        system_prefix.clear();
+                        c
+                    } else {
+                        m.content.clone()
+                    };
+                    out.push(Message { role: m.role.clone(), content });
+                }
+            }
+            out
+        };
+
         #[derive(Serialize)]
         struct Req<'a> { model: &'a str, messages: &'a [Message], max_tokens: u32 }
-        let body = Req { model: model_name, messages, max_tokens: 4096 };
+        let body = Req { model: model_name, messages: &merged, max_tokens: 4096 };
         let client = reqwest::blocking::Client::builder().timeout(Duration::from_secs(300)).build()?;
         let response = client
             .post("https://openrouter.ai/api/v1/chat/completions")
@@ -148,6 +179,25 @@ impl LlmClient {
             .json(&body)
             .send()
             .map_err(|e| anyhow!("OpenRouter request failed: {}", e))?;
+
+        // On 429 parse X-RateLimit-Reset (ms epoch) and report how long to wait
+        if response.status() == 429 {
+            let reset_ms = response.headers()
+                .get("X-RateLimit-Reset")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+            let wait_secs = reset_ms.map(|ms| {
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                ((ms.saturating_sub(now_ms)) / 1000).max(1)
+            }).unwrap_or(5);
+            let text = response.text().unwrap_or_default();
+            return Err(anyhow!("OpenRouter 429 — rate limit, retry after {}s: {}",
+                wait_secs, &text[..text.len().min(200)]));
+        }
+
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().unwrap_or_default();
