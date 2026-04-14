@@ -166,16 +166,23 @@ cargo build --release
 ### Run
 
 ```bash
-# from repo root
+# Always run from the HyperAgents-Ollama repo root:
+cd /path/to/HyperAgents-Ollama
+
 ./rust/target/release/hyperagents \
   --domain text_classify \
   --model ollama/gemma4:e4b \
   --max-generation 5 \
   --num-workers 4 \
   --verbose
+```
 
-# or via cargo
-cd rust && cargo run --release -- \
+Or run via cargo (must be inside `HyperAgents-Ollama/rust/`):
+
+```bash
+cd /path/to/HyperAgents-Ollama/rust
+
+cargo run --release -- \
   --domain emotion \
   --model ollama/qwen2.5-coder:7b \
   --max-generation 8 \
