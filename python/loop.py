@@ -1,6 +1,3 @@
-# Copyright (c) Meta Platforms, Inc. and affiliates.
-# Local (Docker-free) generate loop for HyperAgents with Ollama.
-
 import argparse
 import json
 import os
@@ -10,11 +7,22 @@ import sys
 import time
 from datetime import datetime
 
+# ── Path anchors ──────────────────────────────────────────────────────────────
+# PYTHON_DIR: the python/ subdirectory (where all Python source lives)
+# PROJECT_ROOT: repo root (where .git, rust/, README are)
+PYTHON_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(PYTHON_DIR)
+
+# Make sure agent/, domains/, utils/ are importable from python/
+if PYTHON_DIR not in sys.path:
+    sys.path.insert(0, PYTHON_DIR)
+
 from dotenv import load_dotenv
 
-from utils.common import file_exist_and_not_empty
+# Load .env from project root
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
-load_dotenv()  # load .env into os.environ before spawning any subprocesses
+from utils.common import file_exist_and_not_empty
 
 # Global verbose flag
 VERBOSE = False
@@ -119,7 +127,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
     run_id = f"initial_{domain}{subset}_0"
     cmd = [
         sys.executable, "-m", "domains.harness",
-        "--agent_path", "./task_agent.py",
+        "--agent_path", os.path.join(PYTHON_DIR, "task_agent.py"),
         "--output_dir", output_dir,
         "--run_id", run_id,
         "--domain", domain,
@@ -127,7 +135,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
         "--num_workers", str(num_workers),
         "--subset", subset,
     ]
-    run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
+    run_command(cmd, workdir=PYTHON_DIR, timeout=1800, stream=VERBOSE)
 
     # Generate report
     eval_dir = os.path.join(output_dir, run_id)
@@ -136,7 +144,7 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
         "--domain", domain,
         "--dname", eval_dir,
     ]
-    run_command(cmd, workdir=project_dir, timeout=300)
+    run_command(cmd, workdir=PYTHON_DIR, timeout=300)
 
     elapsed = time.time() - start_time
     score = get_score_from_report(os.path.join(eval_dir, "report.json"))
@@ -154,18 +162,18 @@ def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, it
     chat_history_file = os.path.join(agent_output_dir, "meta_agent_chat_history.md")
 
     cmd = [
-        sys.executable, "run_meta_agent.py",
+        sys.executable, os.path.join(PYTHON_DIR, "run_meta_agent.py"),
         "--model", model,
         "--chat_history_file", chat_history_file,
-        "--repo_path", project_dir + "/",
+        "--repo_path", PYTHON_DIR + "/",
         "--evals_folder", evals_folder,
-        "--git_dir", project_dir,
+        "--git_dir", PROJECT_ROOT,
         "--base_commit", base_commit,
         "--outdir", agent_output_dir,
         "--iterations_left", str(iterations_left),
     ]
     # Always stream meta agent output so you can see what it's doing
-    code, _, _ = run_command(cmd, workdir=project_dir, timeout=3600, stream=True)
+    code, _, _ = run_command(cmd, workdir=PYTHON_DIR, timeout=3600, stream=True)
 
     elapsed = time.time() - start_time
     patch_file = os.path.join(agent_output_dir, "model_patch.diff")
@@ -204,7 +212,7 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
 
     cmd = [
         sys.executable, "-m", "domains.harness",
-        "--agent_path", "./task_agent.py",
+        "--agent_path", os.path.join(PYTHON_DIR, "task_agent.py"),
         "--output_dir", output_dir,
         "--run_id", run_id,
         "--domain", domain,
@@ -212,7 +220,7 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
         "--num_workers", str(num_workers),
         "--subset", subset,
     ]
-    run_command(cmd, workdir=project_dir, timeout=1800, stream=VERBOSE)
+    run_command(cmd, workdir=PYTHON_DIR, timeout=1800, stream=VERBOSE)
 
     # Generate report
     cmd = [
@@ -220,7 +228,7 @@ def run_eval(project_dir, domain, model, output_dir, gen_id, num_samples=-1, sub
         "--domain", domain,
         "--dname", eval_output_dir,
     ]
-    run_command(cmd, workdir=project_dir, timeout=300)
+    run_command(cmd, workdir=PYTHON_DIR, timeout=300)
 
     elapsed = time.time() - start_time
     score = get_score_from_report(os.path.join(eval_output_dir, "report.json"))
@@ -308,11 +316,11 @@ def generate_loop_local(
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
     if output_dir_parent is None:
-        output_dir_parent = os.path.join(os.getcwd(), "outputs_local")
+        output_dir_parent = os.path.join(PROJECT_ROOT, "outputs_local")
     output_dir = os.path.join(output_dir_parent, f"run_{run_id}")
     os.makedirs(output_dir, exist_ok=True)
 
-    project_dir = os.getcwd()
+    project_dir = PROJECT_ROOT   # git repo root (for git ops)
     base_commit = get_base_commit(project_dir)
     archive = []
     archive_file = os.path.join(output_dir, "archive.jsonl")
@@ -475,7 +483,7 @@ def generate_loop_local(
             git_apply_diff(project_dir, best["patch_file"])
 
         best_agent_path = os.path.join(output_dir, "best_task_agent.py")
-        shutil.copy("task_agent.py", best_agent_path)
+        shutil.copy(os.path.join(PYTHON_DIR, "task_agent.py"), best_agent_path)
         print(f"  Best agent source exported to: {best_agent_path}")
 
         # Final cleanup reset

@@ -26,8 +26,8 @@ A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/Hyp
 └─────────────────────────────────────────────────────────┘
 ```
 
-- **Task Agent** (`task_agent.py`) — solves domain tasks with Chain-of-Thought reasoning
-- **Meta Agent** (`meta_agent.py`) — studies failures and rewrites the Task Agent's code
+- **Task Agent** (`python/task_agent.py`) — solves domain tasks with Chain-of-Thought reasoning
+- **Meta Agent** (`python/meta_agent.py`) — studies failures and rewrites the Task Agent's code
 - **Evolution Loop** — iterates for N generations, selecting the best-scoring lineage
 
 ---
@@ -77,23 +77,26 @@ MODEL_NAME=ollama/gemma4:e4b        # any model you have pulled
 ## Python — Running the hyper loop
 
 ```bash
+# Activate venv first
+source venv/bin/activate
+
 # Ollama (local) — factory domain (hardest, 5-class)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
+python python/loop.py --domain factory --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
 
 # OpenRouter — Gemma 3 4B (free, num-workers 1)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
+python python/loop.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
 # OpenRouter — Qwen3 8B (free, num-workers 1)
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
+python python/loop.py --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
 # Apple Silicon MLX
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit --max-generation 5
+python python/loop.py --domain factory --model mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit --max-generation 5
 ```
 
 ### All options
 
 ```
-python generate_loop_local.py [OPTIONS]
+python python/loop.py [OPTIONS]
 
   --domain           {text_classify, emotion, rust, factory, search_arena, paper_review}
   --model            Model string (ollama/*, openrouter/*, mlx/*)
@@ -109,7 +112,8 @@ python generate_loop_local.py [OPTIONS]
 
 **Terminal 1 — run**
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-samples 20 --num-workers 1 --verbose > /tmp/hyperloop.log 2>&1
+source venv/bin/activate
+python python/loop.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-samples 20 --num-workers 1 --verbose > /tmp/hyperloop.log 2>&1
 ```
 
 **Terminal 2 — live log**
@@ -134,33 +138,31 @@ for line in sys.stdin:
 ### Build
 
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust
-cargo build --release
+# Via install script (recommended)
+bash install.sh --rust
+
+# Or directly
+cd rust && cargo build --release
 # binary: rust/target/release/hyperagents
 ```
-
-Or use `bash install.sh --rust` from the project root.
 
 ### Run
 
 ```bash
 # Ollama (local) — factory domain
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
+./rust/target/release/hyperagents --domain factory --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
 
 # OpenRouter — Gemma 3 4B (free, num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
+./rust/target/release/hyperagents --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
 # OpenRouter — Qwen3 8B (free, num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
-
-# OpenRouter — DeepSeek R1 (free, reasoning model)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 1 --verbose
+./rust/target/release/hyperagents --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 ```
 
 Or via cargo:
 
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -- --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
+cd rust && cargo run --release -- --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 ```
 
 ### All Rust options
@@ -224,42 +226,42 @@ cat outputs_local/$(ls outputs_local/ | sort | tail -1)/best_task_agent.py
 ## Project structure
 
 ```
-├── generate_loop_local.py    # Evolution loop — main entry point
-├── task_agent.py             # Task agent — evolves each generation
-├── meta_agent.py             # Meta agent — reads code + failures, writes patch
-├── run_task_agent.py         # Run task agent standalone
-├── run_meta_agent.py         # Run meta agent standalone
 ├── install.sh                # One-command setup
-├── agent/
-│   ├── llm.py                # LLM interface: Ollama / MLX / OpenRouter
-│   ├── llm_withtools.py      # Tool-use loop + fuzzy JSON parser
-│   ├── base_agent.py         # Base agent class
-│   └── tools/                # Editor + Bash tools
-├── domains/
-│   ├── text_classify/        # Sentiment (20 train / 15 val / 15 test)
-│   ├── emotion/              # Emotion classification
-│   ├── factory/              # Virtual factory dispatch (5-class, hardest)
-│   ├── rust/                 # Rust compile-error classification
-│   ├── search_arena/         # Search quality comparison (CSV)
-│   ├── paper_review/         # Academic review outcome (CSV)
-│   ├── harness.py            # Parallel evaluation harness
-│   └── report.py             # Accuracy + per-label metrics
-├── utils/
-│   ├── git_utils.py          # Git reset / clean / patch apply
-│   ├── common.py             # JSON extraction helpers
-│   └── thread_logger.py      # Thread-safe file logging
-├── rust/                     # Rust port of the evolution loop
-│   ├── Cargo.toml
-│   └── src/
-│       ├── main.rs           # CLI entry point
-│       ├── main_loop.rs      # Evolution loop
-│       ├── llm.rs            # HTTP LLM client (Ollama + OpenRouter)
-│       ├── agent/            # Task + Meta agent
-│       ├── domains/          # Domain harness + datasets
-│       └── tools/            # Editor + Bash tools
-├── requirements_local.txt    # Python dependencies
-├── requirements_mlx.txt      # MLX extras (Apple Silicon)
-└── .env.example              # Configuration template
+├── requirements.txt          # Python dependencies
+├── .env.example              # Configuration template
+├── python/                   # Python implementation
+│   ├── loop.py               # Evolution loop — main entry point
+│   ├── task_agent.py         # Task agent — evolves each generation
+│   ├── meta_agent.py         # Meta agent — reads code + failures, writes patch
+│   ├── run_meta_agent.py     # Run meta agent standalone
+│   ├── agent/
+│   │   ├── llm.py            # LLM interface: Ollama / MLX / OpenRouter
+│   │   ├── llm_withtools.py  # Tool-use loop + fuzzy JSON parser
+│   │   ├── base_agent.py     # Base agent class
+│   │   └── tools/            # Editor + Bash tools
+│   ├── domains/
+│   │   ├── text_classify/    # Sentiment (20 train / 15 val / 15 test)
+│   │   ├── emotion/          # Emotion classification
+│   │   ├── factory/          # Virtual factory dispatch (5-class, hardest)
+│   │   ├── rust/             # Rust compile-error classification
+│   │   ├── search_arena/     # Search quality comparison (CSV)
+│   │   ├── paper_review/     # Academic review outcome (CSV)
+│   │   ├── harness.py        # Parallel evaluation harness
+│   │   └── report.py         # Accuracy + per-label metrics
+│   └── utils/
+│       ├── git_utils.py      # Git reset / clean / patch apply
+│       ├── common.py         # JSON extraction helpers
+│       └── thread_logger.py  # Thread-safe file logging
+└── rust/                     # Rust port of the evolution loop
+    ├── Cargo.toml
+    └── src/
+        ├── main.rs           # CLI entry point
+        ├── runner.rs         # Evolution loop
+        ├── llm.rs            # HTTP LLM client (Ollama + OpenRouter)
+        ├── agent/            # Task + Meta agent
+        ├── domains/          # Domain harness + datasets
+        ├── tools/            # Editor + Bash tools
+        └── utils/            # Shared utilities
 ```
 
 ---

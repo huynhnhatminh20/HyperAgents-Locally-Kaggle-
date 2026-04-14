@@ -2,7 +2,7 @@
 # HyperAgents-Ollama — one-command installer
 # Usage: bash install.sh [--mlx] [--rust]
 #   --mlx   also install Apple Silicon MLX support
-#   --rust  also build the Rust binary
+#   --rust  also build the Rust binary (~30s)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -45,7 +45,7 @@ echo "  Virtual environment active ✓"
 # ── 3. Pip install ──────────────────────────────────────────────────
 echo "  Installing Python dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet -r requirements_local.txt
+pip install --quiet -r requirements.txt
 
 if [ "$MLX" -eq 1 ]; then
   echo "  Installing MLX support (Apple Silicon)..."
@@ -78,17 +78,15 @@ echo "================================================================"
 echo "  Setup complete!"
 echo "================================================================"
 echo ""
-echo "  Activate environment:"
+echo "  Activate environment (required before running):"
 echo "    source venv/bin/activate"
 echo ""
-echo "  Run the hyper loop (Python):"
-echo "    python generate_loop_local.py --domain factory \\"
-echo "      --model ollama/gemma4:e4b --max-generation 8 --verbose"
+echo "  Run Python evolution loop:"
+echo "    python python/loop.py --domain factory --model ollama/gemma4:e4b --max-generation 8 --verbose"
 echo ""
 if [ "$BUILD_RUST" -eq 1 ] && command -v cargo &>/dev/null; then
-echo "  Run the hyper loop (Rust):"
-echo "    ./rust/target/release/hyperagents --domain factory \\"
-echo "      --model ollama/gemma4:e4b --max-generation 8 --verbose"
+echo "  Run Rust evolution loop:"
+echo "    ./rust/target/release/hyperagents --domain factory --model ollama/gemma4:e4b --max-generation 8 --verbose"
 echo ""
 fi
 echo "  Domains: text_classify  emotion  rust  factory  search_arena  paper_review"

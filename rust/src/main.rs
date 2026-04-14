@@ -1,13 +1,12 @@
 mod agent;
 mod domains;
 mod llm;
-mod main_loop;
-mod progress;
+mod runner;
 mod tools;
 mod utils;
 
 use clap::Parser;
-use main_loop::{Config, generate_loop_local};
+use runner::{Config, run};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -65,10 +64,8 @@ fn main() {
         verbose: cli.verbose,
     };
 
-    match generate_loop_local(config) {
-        Ok(output_dir) => {
-            println!("Done. Output: {}", output_dir.display());
-        }
+    match run(config) {
+        Ok(output_dir) => println!("Done. Output: {}", output_dir.display()),
         Err(e) => {
             eprintln!("Error: {:#}", e);
             std::process::exit(1);

@@ -1,4 +1,4 @@
-use crate::main_loop::ArchiveEntry;
+use crate::runner::ArchiveEntry;
 
 const BAR_HEIGHT: usize = 8;
 const BAR_WIDTH: usize = 5;

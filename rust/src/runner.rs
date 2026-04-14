@@ -8,7 +8,7 @@ use crate::agent::meta_agent::MetaAgent;
 use crate::agent::task_agent::TaskAgent;
 use crate::domains::harness::run_harness;
 use crate::domains::report::generate_report;
-use crate::progress::{print_evolution_tree, print_progress_graph};
+use crate::utils::progress::{print_evolution_tree, print_progress_graph};
 use crate::utils::common::{file_exists_and_not_empty, get_score_from_report};
 use crate::utils::git::{get_base_commit, git_apply_diff, git_reset};
 
@@ -75,7 +75,7 @@ fn format_score(score: Option<f64>) -> String {
 }
 
 /// Run the full local generation loop.
-pub fn generate_loop_local(config: Config) -> Result<PathBuf> {
+pub fn run(config: Config) -> Result<PathBuf> {
     // Load .env if present
     let _ = dotenv::dotenv();
 
