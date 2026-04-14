@@ -1,4 +1,4 @@
-# 🧬 HyperAgents-Ollama (Proposed: **Recurse-Local** 🌀)
+# HyperAgents-Ollama
 
 **Self-Improving AI Agents — Local, Cloud, or Free**
 
@@ -8,90 +8,7 @@ A fork of [facebookresearch/HyperAgents](https://github.com/facebookresearch/Hyp
 
 ---
 
-## 🌀 How it Works: The Meta-Loop
-
-The core of the project is a self-referential cycle where the agent literally rewrites its own brain to become better at a specific task.
-
-### 1. The Evolution Cycle
-```mermaid
-graph TD
-    subgraph "Generation N"
-        A[Task Agent vN] -->|Solve Tasks| B(Evaluation Harness)
-        B -->|Report: Accuracy + Failures| C{Score > Best?}
-        C -->|Yes| D[New Champion]
-        C -->|No| E[Discard / Re-try]
-    end
-    
-    subgraph "Self-Modification (Meta Agent)"
-        F[Meta Agent] -->|Reads| G[Task Agent Source Code]
-        F -->|Analyzes| B
-        F -->|Writes| H[Python/Rust Code Patch]
-        H -->|Applies Git Diff| I[Task Agent vN+1]
-    end
-    
-    I --> A
-    D -->|Parent| F
-```
-
-### 3. Lineage Tree (Example)
-The system maintains a "Tree of Life" for your agents. Only the strongest versions survive to seed the next generation.
-
-```mermaid
-graph TD
-    v0[v0: Baseline - 62%] --> v1a[v1a: Improved Prompts - 68%]
-    v0 --> v1b[v1b: Added Few-Shot - 71%]
-    v1b --> v2a[v2a: Chain-of-Thought - 79%]
-    v1b --> v2b[v2b: Hardcoded Rules - 74%]
-    v2a --> v3[v3: Hybrid Logic - 88% ⭐]
-```
-
-### 2. System Architecture
-```mermaid
-graph LR
-    subgraph "Execution Layer"
-        Loop[Evolution Loop]
-        Harness[Eval Harness]
-    end
-
-    subgraph "Agent Layer"
-        Task[Task Agent]
-        Meta[Meta Agent]
-    end
-
-    subgraph "Backend (Local First)"
-        Ollama[Ollama]
-        MLX[MLX-LM]
-        OpenRouter[OpenRouter]
-    end
-
-    Loop --> Task
-    Loop --> Meta
-    Task --> Harness
-    Task --- Backend
-    Meta --- Backend
-    
-    Backend --- Ollama
-    Backend --- MLX
-    Backend --- OpenRouter
-```
-
----
-
-## 🏷️ Rebranding Research
-
-We are looking for a new name that captures the **Local** and **Recursive** nature of the framework. Here are some candidates:
-
-| Name | Theme | Why it works |
-|---|---|---|
-| **Recurse** | Technical | Directly describes the self-referential code-writing loop. |
-| **Ouro** | Mythological | Short for Ouroboros (the snake eating its tail), a symbol of recursion. |
-| **Helix** | Biological | Represents the DNA-like code structure and evolution. |
-| **Forge-Local** | Industrial | Focuses on the "Forging" of better agents on your own hardware. |
-| **Loom** | Craft | Weaving better logic into the agent's source code. |
-
----
-
-## How it works (Original)
+## How it works
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -115,17 +32,17 @@ We are looking for a new name that captures the **Local** and **Recursive** natu
 
 ---
 
-## Setup
+## Install
 
 ```bash
 git clone <repo>
 cd HyperAgents-Ollama
-python -m venv venv && source venv/bin/activate
-pip install -r requirements_local.txt
-
-cp .env.example .env
-# edit .env — see Configuration section below
+bash install.sh          # Python venv + dependencies
+bash install.sh --rust   # also build the Rust binary (~30s)
+bash install.sh --mlx    # also install Apple Silicon MLX support
 ```
+
+Then edit `.env` to set your model and API keys (created automatically from `.env.example`).
 
 ---
 
@@ -135,11 +52,9 @@ cp .env.example .env
 # ── Local Ollama ──────────────────────────────────────
 OLLAMA_BASE_URL=http://localhost:11434
 MODEL_NAME=ollama/gemma4:e4b        # any model you have pulled
-MAX_TOKENS=4096
 
 # ── Apple Silicon (MLX) ──────────────────────────────
 # MODEL_NAME=mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit
-# MLX_MODEL_PATH=/path/to/local/weights   # optional local override
 
 # ── OpenRouter (300+ models, many free) ──────────────
 # OPENROUTER_API_KEY=sk-or-...
@@ -154,25 +69,21 @@ MAX_TOKENS=4096
 | Llama 4 Scout | `openrouter/meta-llama/llama-4-scout:free` |
 | Qwen3 8B | `openrouter/qwen/qwen3-8b:free` |
 | DeepSeek R1 | `openrouter/deepseek/deepseek-r1-0528:free` |
-| Claude Sonnet | `openrouter/anthropic/claude-sonnet-4-5` |
+
+> **Note:** Free models are rate-limited to 20 req/min — use `--num-workers 1`.
 
 ---
 
 ## Python — Running the hyper loop
 
-### Quick start (absolute paths, from anywhere)
-
 ```bash
-# Ollama (local) — factory domain
+# Ollama (local) — factory domain (hardest, 5-class)
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
 
-# Ollama (local) — rust domain
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model ollama/gemma4:e4b --max-generation 8 --num-workers 3 --verbose
-
-# OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
+# OpenRouter — Gemma 3 4B (free, num-workers 1)
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
-# OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
+# OpenRouter — Qwen3 8B (free, num-workers 1)
 cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
 # Apple Silicon MLX
@@ -184,7 +95,7 @@ cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local
 ```
 python generate_loop_local.py [OPTIONS]
 
-  --domain           {text_classify, search_arena, paper_review, rust, factory}
+  --domain           {text_classify, emotion, rust, factory, search_arena, paper_review}
   --model            Model string (ollama/*, openrouter/*, mlx/*)
   --max-generation   Number of evolution generations  [default: 5]
   --num-samples      Samples per eval, -1 for all     [default: -1]
@@ -194,11 +105,11 @@ python generate_loop_local.py [OPTIONS]
   --verbose / -v     Stream all subprocess output live
 ```
 
-### Recommended run (3 terminals)
+### 3-terminal workflow
 
 **Terminal 1 — run**
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain rust --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-samples 20 --num-workers 3 --parent-selection best --verbose > /tmp/hyperloop.log 2>&1
+cd /Users/nick/development/TEMP/HyperAgents-Ollama && python generate_loop_local.py --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-samples 20 --num-workers 1 --verbose > /tmp/hyperloop.log 2>&1
 ```
 
 **Terminal 2 — live log**
@@ -208,57 +119,48 @@ tail -f /tmp/hyperloop.log
 
 **Terminal 3 — score graph**
 ```bash
-watch -n3 '
-LATEST=$(ls outputs_local/ | sort | tail -1)
-echo "Run: $LATEST"
-cat outputs_local/$LATEST/archive.jsonl 2>/dev/null \
-  | python3 -c "
-import sys, json
+watch -n3 'LATEST=$(ls outputs_local/ | sort | tail -1) && echo "Run: $LATEST" && cat outputs_local/$LATEST/archive.jsonl 2>/dev/null | python3 -c "import sys,json
 for line in sys.stdin:
-    r = json.loads(line)
-    bar = \"#\" * int(r.get(\"score\",0)*30)
+    r=json.loads(line)
+    bar=\"#\"*int(r.get(\"score\",0)*30)
     print(f\"  Gen {r[\"gen\"]:>2}  {r.get(\"score\",0):.3f}  {bar}\")
-" || echo "  waiting for gen 0..."
-'
+" || echo "  waiting..."'
 ```
 
 ---
 
 ## Rust — Running the hyper loop
 
-The `rust/` directory is a native Rust port of the same evolution loop, using Rayon for parallelism and Reqwest for HTTP.
-
 ### Build
 
 ```bash
 cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust
 cargo build --release
-# binary lands at: rust/target/release/hyperagents
+# binary: rust/target/release/hyperagents
 ```
 
-### Run (absolute paths, from anywhere)
+Or use `bash install.sh --rust` from the project root.
+
+### Run
 
 ```bash
-# Ollama (local) — factory domain (hardest)
+# Ollama (local) — factory domain
 /Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
 
-# Ollama (local) — emotion domain
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain emotion --model ollama/qwen2.5-coder:7b --max-generation 8 --num-workers 4 --parent-selection best --verbose
+# OpenRouter — Gemma 3 4B (free, num-workers 1)
+/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 
-# OpenRouter — Gemma 3 4B (free, 20 req/min limit → num-workers 1)
-/Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
-
-# OpenRouter — Qwen3 8B (free, 20 req/min limit → num-workers 1)
+# OpenRouter — Qwen3 8B (free, num-workers 1)
 /Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/qwen/qwen3-8b:free --max-generation 8 --num-workers 1 --verbose
 
-# OpenRouter — DeepSeek R1 (free, reasoning model, num-workers 1)
+# OpenRouter — DeepSeek R1 (free, reasoning model)
 /Users/nick/development/TEMP/HyperAgents-Ollama/rust/target/release/hyperagents --domain factory --model openrouter/deepseek/deepseek-r1-0528:free --max-generation 5 --num-workers 1 --verbose
 ```
 
-Or via cargo (cd into rust/ first):
+Or via cargo:
 
 ```bash
-cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -- --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --parent-selection best --verbose
+cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -- --domain factory --model openrouter/google/gemma-3-4b-it:free --max-generation 8 --num-workers 1 --verbose
 ```
 
 ### All Rust options
@@ -266,7 +168,7 @@ cd /Users/nick/development/TEMP/HyperAgents-Ollama/rust && cargo run --release -
 ```
 hyperagents [OPTIONS]
 
-  --domain           {text_classify, search_arena, paper_review, emotion, factory}
+  --domain           {text_classify, emotion, factory, search_arena, paper_review}
   --model            Model string (ollama/*, openrouter/*)  [default: ollama/llama3.2]
   --max-generation   Evolution generations                  [default: 5]
   --num-samples      Samples per eval, -1 for all          [default: -1]
@@ -276,8 +178,6 @@ hyperagents [OPTIONS]
   --verbose / -v     Verbose output
 ```
 
-> **Note:** The Rust port supports `text_classify`, `search_arena`, `paper_review`, `emotion`, and `factory` domains. The Python version additionally supports `rust` (Rust compiler-error classification).
-
 ---
 
 ## Domains
@@ -285,11 +185,11 @@ hyperagents [OPTIONS]
 | Domain | Labels | Description | Python | Rust |
 |---|---|---|:---:|:---:|
 | `text_classify` | positive / negative / neutral | Sentiment classification — good baseline | ✓ | ✓ |
-| `search_arena` | a / b | Which of two search responses is better | ✓ | ✓ |
-| `paper_review` | accept / reject / … | Academic paper outcome prediction | ✓ | ✓ |
 | `emotion` | joy / anger / fear / … | Emotion classification | ✓ | ✓ |
-| `factory` | expedite / prioritize_urgent / rebalance / batch_production / optimize_throughput | Virtual factory floor dispatch controller — 5-class, rule-based, hardest domain | ✓ | ✓ |
+| `factory` | expedite / prioritize_urgent / rebalance / batch_production / optimize_throughput | Virtual factory floor dispatch — 5-class, rule-based, hardest | ✓ | ✓ |
 | `rust` | compiles / borrow_error / type_error | Rust compile-error classification | ✓ | — |
+| `search_arena` | a / b | Which of two search responses is better (CSV dataset required) | ✓ | — |
+| `paper_review` | accept / reject / … | Academic paper outcome (CSV dataset required) | ✓ | — |
 
 ---
 
@@ -312,13 +212,10 @@ run_20260414_164911/
 ```
 
 ```bash
-# Final score summary
+# Score summary
 cat outputs_local/$(ls outputs_local/ | sort | tail -1)/archive.jsonl
 
-# See the patch the meta agent wrote in gen 1
-cat outputs_local/$(ls outputs_local/ | sort | tail -1)/gen_1/agent_output/model_patch.diff
-
-# Read the best evolved agent
+# Best evolved agent
 cat outputs_local/$(ls outputs_local/ | sort | tail -1)/best_task_agent.py
 ```
 
@@ -327,38 +224,41 @@ cat outputs_local/$(ls outputs_local/ | sort | tail -1)/best_task_agent.py
 ## Project structure
 
 ```
-├── generate_loop_local.py    # 🚀 Python evolution loop (main entry point)
-├── task_agent.py             # 🔍 Task agent — CoT reasoning, evolves each gen
-├── meta_agent.py             # 🧠 Meta agent — reads code + failures, writes patch
+├── generate_loop_local.py    # Evolution loop — main entry point
+├── task_agent.py             # Task agent — evolves each generation
+├── meta_agent.py             # Meta agent — reads code + failures, writes patch
 ├── run_task_agent.py         # Run task agent standalone
 ├── run_meta_agent.py         # Run meta agent standalone
+├── install.sh                # One-command setup
 ├── agent/
-│   ├── llm.py                # LLM interface: Ollama / MLX / OpenRouter / Cloud
+│   ├── llm.py                # LLM interface: Ollama / MLX / OpenRouter
 │   ├── llm_withtools.py      # Tool-use loop + fuzzy JSON parser
-│   ├── base_agent.py         # Base class
+│   ├── base_agent.py         # Base agent class
 │   └── tools/                # Editor + Bash tools
 ├── domains/
 │   ├── text_classify/        # Sentiment (20 train / 15 val / 15 test)
-│   ├── search_arena/         # Search quality comparison
-│   ├── paper_review/         # Academic review outcome
 │   ├── emotion/              # Emotion classification
+│   ├── factory/              # Virtual factory dispatch (5-class, hardest)
 │   ├── rust/                 # Rust compile-error classification
+│   ├── search_arena/         # Search quality comparison (CSV)
+│   ├── paper_review/         # Academic review outcome (CSV)
 │   ├── harness.py            # Parallel evaluation harness
 │   └── report.py             # Accuracy + per-label metrics
 ├── utils/
 │   ├── git_utils.py          # Git reset / clean / patch apply
-│   └── common.py             # JSON extraction helpers
-├── rust/                     # 🦀 Rust port of the evolution loop
+│   ├── common.py             # JSON extraction helpers
+│   └── thread_logger.py      # Thread-safe file logging
+├── rust/                     # Rust port of the evolution loop
 │   ├── Cargo.toml
 │   └── src/
 │       ├── main.rs           # CLI entry point
 │       ├── main_loop.rs      # Evolution loop
-│       ├── llm.rs            # HTTP LLM client
+│       ├── llm.rs            # HTTP LLM client (Ollama + OpenRouter)
 │       ├── agent/            # Task + Meta agent
 │       ├── domains/          # Domain harness + datasets
 │       └── tools/            # Editor + Bash tools
-├── run_local_isolated.sh     # 🛡️ Safe run in temp directory (macOS/Linux)
-├── run_all_benchmarks.sh     # 🎯 Multi-domain benchmark suite
+├── requirements_local.txt    # Python dependencies
+├── requirements_mlx.txt      # MLX extras (Apple Silicon)
 └── .env.example              # Configuration template
 ```
 

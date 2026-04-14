@@ -1,7 +1,6 @@
 import argparse
 import ast
 import os
-import sys
 
 from agent.llm import DEFAULT_MODEL
 from meta_agent import MetaAgent

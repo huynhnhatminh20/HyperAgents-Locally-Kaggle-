@@ -1,8 +1,11 @@
 __pycache__/
 *.py[cod]
+*.pyo
 .DS_Store
 .vscode/
+.idea/
 venv/
 .venv/
 outputs_local/
 .env
+rust/target/
