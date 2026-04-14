@@ -28,6 +28,18 @@ impl MetaAgent {
                 "emotion detection (classify the primary emotion in a sentence)",
                 "joy, anger, sadness, fear, surprise",
             ),
+            "factory" => (
+                "factory operations optimization (decide on the best action for a factory setup)",
+                "expedite, prioritize_urgent, rebalance, batch_production, optimize_throughput",
+            ),
+            "search_arena" => (
+                "search result comparison (decide which search response is better)",
+                "a, b",
+            ),
+            "paper_review" => (
+                "academic paper outcome prediction (decide if a paper should be accepted or rejected)",
+                "accept, reject",
+            ),
             _ => (
                 "sentiment classification",
                 "positive, negative, neutral",

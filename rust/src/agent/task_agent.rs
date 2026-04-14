@@ -37,10 +37,19 @@ impl TaskAgent {
         let client = LlmClient::new(&self.model);
         let response = client.chat(&messages)?;
 
-        // Derive valid labels from the domain instruction (covers both text_classify and emotion)
+        // Derive valid labels from the domain instruction
         let domain = inputs.get("domain").and_then(|v| v.as_str()).unwrap_or("");
         let valid_labels: &[&str] = match domain {
             "emotion" => &["joy", "anger", "sadness", "fear", "surprise"],
+            "factory" => &[
+                "expedite",
+                "prioritize_urgent",
+                "rebalance",
+                "batch_production",
+                "optimize_throughput",
+            ],
+            "search_arena" => &["a", "b"],
+            "paper_review" => &["accept", "reject"],
             _ => &["positive", "negative", "neutral"],
         };
         Ok(self.parse_prediction(&response, valid_labels))
