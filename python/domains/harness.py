@@ -30,6 +30,14 @@ def get_dataset(domain, subset=""):
         from domains.factory.dataset import get_split
         split = next((s for s in ("train", "val", "test") if s in subset), "train")
         return pd.DataFrame(get_split(split))
+    if domain == "formwerk":
+        from domains.formwerk.dataset import DATASET
+        # Split: first 14 = train, last 6 = validation
+        if "val" in subset or "test" in subset:
+            data = [d for d in DATASET if d["id"].startswith("v")]
+        else:
+            data = [d for d in DATASET if not d["id"].startswith("v")]
+        return pd.DataFrame(data)
     # CSV-based domains
     return pd.read_csv(f"./domains/{domain}/dataset{subset}.csv", dtype=str)
 
