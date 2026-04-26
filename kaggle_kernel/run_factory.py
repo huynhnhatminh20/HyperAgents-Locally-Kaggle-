@@ -11,7 +11,7 @@ from pathlib import Path
 
 WORK_ROOT = Path("/kaggle/working")
 REPO_DST = WORK_ROOT / "HyperAgents-Locally"
-REPO_URL = os.environ.get("HYPERAGENTS_REPO_URL", "https://github.com/quantumnic/HyperAgents-Locally.git")
+REPO_URL = os.environ.get("HYPERAGENTS_REPO_URL", "https://github.com/huynhnhatminh20/HyperAgents-Locally-Kaggle-.git")
 REPO_REF = os.environ.get("HYPERAGENTS_REPO_REF", "")
 DEFAULT_MODEL = "hf-local/Qwen/Qwen2.5-7B-Instruct"
 EXTRA_PACKAGES = [
