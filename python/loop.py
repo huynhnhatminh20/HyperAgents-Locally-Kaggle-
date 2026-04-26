@@ -152,9 +152,10 @@ def run_initial_eval(project_dir, domain, model, output_dir, num_samples=-1, sub
     return score
 
 
-def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, iterations_left=5):
+def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, iterations_left=5, meta_model=None):
     """Run the meta agent to produce modifications."""
-    print(f"\n  Running meta agent (model={model})...")
+    meta_model = meta_model or os.environ.get("META_MODEL", model)
+    print(f"\n  Running meta agent (model={meta_model})...")
     start_time = time.time()
 
     agent_output_dir = os.path.join(output_dir, "agent_output")
@@ -163,7 +164,7 @@ def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, it
 
     cmd = [
         sys.executable, os.path.join(PYTHON_DIR, "run_meta_agent.py"),
-        "--model", model,
+        "--model", meta_model,
         "--chat_history_file", chat_history_file,
         "--repo_path", PYTHON_DIR + "/",
         "--evals_folder", evals_folder,
@@ -395,6 +396,7 @@ def generate_loop_local(
         success, patch_file = run_meta_agent(
             project_dir, model, gen_output_dir, base_commit,
             evals_folder, iterations_left=max_generation - gen_id,
+            meta_model=os.environ.get("META_MODEL", model),
         )
 
         score = None
