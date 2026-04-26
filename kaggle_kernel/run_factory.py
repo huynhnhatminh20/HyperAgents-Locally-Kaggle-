@@ -14,6 +14,7 @@ REPO_DST = WORK_ROOT / "HyperAgents-Locally"
 REPO_URL = os.environ.get("HYPERAGENTS_REPO_URL", "https://github.com/huynhnhatminh20/HyperAgents-Locally-Kaggle-.git")
 REPO_REF = os.environ.get("HYPERAGENTS_REPO_REF", "")
 DEFAULT_MODEL = "hf-local/Qwen/Qwen2.5-7B-Instruct"
+DEFAULT_META_MODEL = "hf-local/Qwen/Qwen2.5-3B-Instruct"
 EXTRA_PACKAGES = [
     "backoff",
     "transformers>=4.45.0",
@@ -179,7 +180,37 @@ def install_runtime_dependencies() -> None:
     subprocess.run(["python", "-m", "pip", "install", *EXTRA_PACKAGES], cwd=REPO_DST, check=True)
 
 
+def patch_loop_meta_model() -> None:
+    loop_path = REPO_DST / "python" / "loop.py"
+    text = loop_path.read_text(encoding="utf-8")
+
+    old = 'def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, iterations_left=5):'
+    new = 'def run_meta_agent(project_dir, model, output_dir, base_commit, evals_folder, iterations_left=5, meta_model=None):'
+    if old in text:
+        text = text.replace(old, new)
+
+    old = '    print(f"\\n  Running meta agent (model={model})...")'
+    new = '    meta_model = meta_model or os.environ.get("META_MODEL", model)\\n    print(f"\\n  Running meta agent (model={meta_model})...")'
+    if old in text:
+        text = text.replace(old, new)
+
+    old = '        "--model", model,'
+    new = '        "--model", meta_model,'
+    if old in text:
+        text = text.replace(old, new, 1)
+
+    old = '        success, patch_file = run_meta_agent(\\n            project_dir, model, gen_output_dir, base_commit,\\n            evals_folder, iterations_left=max_generation - gen_id,\\n        )'
+    new = '        success, patch_file = run_meta_agent(\\n            project_dir, model, gen_output_dir, base_commit,\\n            evals_folder, iterations_left=max_generation - gen_id,\\n            meta_model=os.environ.get("META_MODEL", "hf-local/Qwen/Qwen2.5-3B-Instruct"),\\n        )'
+    if old in text:
+        text = text.replace(old, new)
+
+    loop_path.write_text(text, encoding="utf-8")
+    print(f"[setup] Patched loop meta model selection into {loop_path}")
+
+
 def run_loop(model_name: str) -> None:
+    meta_model = os.environ.get("META_MODEL", DEFAULT_META_MODEL)
+    os.environ["META_MODEL"] = meta_model
     cmd = [
         "python",
         "python/loop.py",
@@ -195,7 +226,7 @@ def run_loop(model_name: str) -> None:
         os.environ.get("HYPERAGENTS_NUM_WORKERS", "1"),
         "--verbose",
     ]
-    print(f"[run] Running loop with model={model_name}")
+    print(f"[run] Running loop with task model={model_name} and meta model={meta_model}")
     subprocess.run(cmd, cwd=REPO_DST, check=True)
 
 
@@ -203,6 +234,7 @@ def main() -> None:
     ensure_repo_copy()
     configure_hf_token()
     patch_llm_backend()
+    patch_loop_meta_model()
     model_name = write_env_file()
     install_runtime_dependencies()
     run_loop(model_name)
