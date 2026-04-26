@@ -119,17 +119,28 @@ def _get_hf_local_response(messages, model_id, max_tokens, temperature):
         prompt = tokenizer.apply_chat_template(messages, **chat_kwargs)
 
     inputs = tokenizer(prompt, return_tensors="pt").to(model_obj.device)
-    with torch.no_grad():
-        output_ids = model_obj.generate(
-            **inputs,
-            max_new_tokens=min(max_tokens, 512),
-            do_sample=temperature > 0,
-            temperature=max(temperature, 1e-5),
-            pad_token_id=tokenizer.eos_token_id,
-        )
+    try:
+        with torch.no_grad():
+            output_ids = model_obj.generate(
+                **inputs,
+                max_new_tokens=min(max_tokens, 512),
+                do_sample=temperature > 0,
+                temperature=max(temperature, 1e-5),
+                pad_token_id=tokenizer.eos_token_id,
+            )
 
-    generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
-    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+        response_text = tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
+        return response_text
+    finally:
+        # Free per-request tensors so repeated calls are less likely to fragment VRAM.
+        if "generated_ids" in locals():
+            del generated_ids
+        if "output_ids" in locals():
+            del output_ids
+        del inputs
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
 
 def _get_mlx_response(messages, model_id, max_tokens, temperature):
