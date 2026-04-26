@@ -9,6 +9,7 @@ import json
 load_dotenv()
 
 MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096"))
+MAX_TOKENS_META = int(os.environ.get("MAX_TOKENS_META", str(MAX_TOKENS)))
 
 # --- llama.cpp server (direct GGUF, OpenAI-compatible API) ---
 # Start: llama-server -m model.gguf --port 8080 -c 8192 -ngl 99
@@ -205,6 +206,10 @@ def get_response_from_llm(
 ) -> Tuple[str, list, dict]:
     if msg_history is None:
         msg_history = []
+
+    # Meta-agent can use a lower token cap to stay within VRAM on smaller GPUs.
+    if model == os.environ.get("META_MODEL"):
+        max_tokens = min(max_tokens, MAX_TOKENS_META)
 
     # Convert text to content, compatible with LITELLM API
     msg_history = [

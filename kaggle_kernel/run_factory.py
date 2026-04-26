@@ -14,7 +14,7 @@ REPO_DST = WORK_ROOT / "HyperAgents-Locally"
 REPO_URL = os.environ.get("HYPERAGENTS_REPO_URL", "https://github.com/huynhnhatminh20/HyperAgents-Locally-Kaggle-.git")
 REPO_REF = os.environ.get("HYPERAGENTS_REPO_REF", "")
 DEFAULT_MODEL = "hf-local/Qwen/Qwen2.5-7B-Instruct"
-DEFAULT_META_MODEL = "hf-local/Qwen/Qwen2.5-3B-Instruct"
+DEFAULT_META_MODEL = "hf-local/Qwen/Qwen2.5-1.5B-Instruct"
 EXTRA_PACKAGES = [
     "backoff",
     "transformers>=4.45.0",
@@ -158,6 +158,12 @@ def configure_hf_token() -> None:
     else:
         print("[setup] HF_TOKEN/HUGGINGFACE_HUB_TOKEN not found; public models may still work")
 
+    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = os.environ.get(
+        "PYTORCH_CUDA_ALLOC_CONF",
+        "expandable_segments:True",
+    )
+    print(f"[setup] PYTORCH_CUDA_ALLOC_CONF={os.environ['PYTORCH_CUDA_ALLOC_CONF']}")
+
 
 def write_env_file() -> str:
     env_path = REPO_DST / ".env"
@@ -200,7 +206,7 @@ def patch_loop_meta_model() -> None:
         text = text.replace(old, new, 1)
 
     old = '        success, patch_file = run_meta_agent(\\n            project_dir, model, gen_output_dir, base_commit,\\n            evals_folder, iterations_left=max_generation - gen_id,\\n        )'
-    new = '        success, patch_file = run_meta_agent(\\n            project_dir, model, gen_output_dir, base_commit,\\n            evals_folder, iterations_left=max_generation - gen_id,\\n            meta_model=os.environ.get("META_MODEL", "hf-local/Qwen/Qwen2.5-3B-Instruct"),\\n        )'
+    new = '        success, patch_file = run_meta_agent(\\n            project_dir, model, gen_output_dir, base_commit,\\n            evals_folder, iterations_left=max_generation - gen_id,\\n            meta_model=os.environ.get("META_MODEL", "hf-local/Qwen/Qwen2.5-1.5B-Instruct"),\\n        )'
     if old in text:
         text = text.replace(old, new)
 
@@ -211,6 +217,8 @@ def patch_loop_meta_model() -> None:
 def run_loop(model_name: str) -> None:
     meta_model = os.environ.get("META_MODEL", DEFAULT_META_MODEL)
     os.environ["META_MODEL"] = meta_model
+    os.environ["MAX_TOKENS"] = os.environ.get("MAX_TOKENS", "384")
+    os.environ["MAX_TOKENS_META"] = os.environ.get("MAX_TOKENS_META", "96")
     cmd = [
         "python",
         "python/loop.py",
@@ -226,7 +234,10 @@ def run_loop(model_name: str) -> None:
         os.environ.get("HYPERAGENTS_NUM_WORKERS", "1"),
         "--verbose",
     ]
-    print(f"[run] Running loop with task model={model_name} and meta model={meta_model}")
+    print(
+        f"[run] Running loop with task model={model_name}, meta model={meta_model}, "
+        f"MAX_TOKENS={os.environ['MAX_TOKENS']}, MAX_TOKENS_META={os.environ['MAX_TOKENS_META']}"
+    )
     subprocess.run(cmd, cwd=REPO_DST, check=True)
 
 
