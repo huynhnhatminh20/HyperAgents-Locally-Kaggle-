@@ -62,6 +62,27 @@ bash install.sh --mlx    # also install Apple Silicon MLX support
 
 Then edit `.env` to set your model and API keys (created automatically from `.env.example`).
 
+### Windows + Kaggle quick setup
+
+If you want this repo to talk to Kaggle from Windows, first place your Kaggle API token at `C:\Users\YOUR_NAME\Downloads\kaggle.json`, then run:
+
+```powershell
+.\scripts\setup_kaggle.ps1 -InstallCli -CreateVenv
+```
+
+That script:
+- copies `kaggle.json` to `%USERPROFILE%\.kaggle\kaggle.json`
+- creates a repo-local `venv` if needed
+- installs the `kaggle` package into that environment
+
+Useful checks:
+
+```powershell
+.\venv\Scripts\kaggle.exe --version
+.\venv\Scripts\kaggle.exe config view
+.\venv\Scripts\kaggle.exe datasets list -s titanic
+```
+
 ---
 
 ## Configuration (`.env`)

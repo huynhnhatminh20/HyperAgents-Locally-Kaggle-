@@ -31,6 +31,9 @@ OLLAMA_QWEN = "ollama/qwen2.5-coder"
 MLX_MODEL_PATH = os.environ.get("MLX_MODEL_PATH", "")  # optional local path override
 MLX_QWEN_OPUS = "mlx/BeastCode/Qwen3.5-27B-Claude-4.6-Opus-Distilled-MLX-4bit"
 
+# --- Hugging Face local Transformers (GPU, 4-bit) ---
+HF_LOCAL_QWEN_7B = "hf-local/Qwen/Qwen2.5-7B-Instruct"
+
 # --- OpenRouter (cloud gateway — 300+ models, many free) ---
 # Use "openrouter/<provider>/<model>" e.g. openrouter/google/gemma-3-4b-it:free
 # Set OPENROUTER_API_KEY in .env. Free tier models end in :free.
@@ -71,6 +74,62 @@ litellm.drop_params=True
 # MLX helper — lazily loaded so mlx-lm is only required when using mlx/ models
 # ---------------------------------------------------------------------------
 _mlx_model_cache = {}  # cache loaded model+tokenizer by path
+_hf_local_cache = {}  # cache loaded model+tokenizer by repo id
+
+
+def _get_hf_local_response(messages, model_id, max_tokens, temperature):
+    """Generate a response using Transformers 4-bit inference."""
+    try:
+        import torch
+        from transformers import (
+            AutoModelForCausalLM,
+            AutoTokenizer,
+            BitsAndBytesConfig,
+        )
+    except ImportError:
+        raise ImportError(
+            "transformers + accelerate + bitsandbytes are required for hf-local models."
+        )
+
+    model_name = model_id.removeprefix("hf-local/")
+    if model_name not in _hf_local_cache:
+        print(f"  [HF-LOCAL] Loading model from {model_name} ...")
+        quant_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_compute_dtype=torch.float16,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        model_obj = AutoModelForCausalLM.from_pretrained(
+            model_name,
+            device_map="auto",
+            quantization_config=quant_config,
+            torch_dtype=torch.float16,
+            trust_remote_code=True,
+        )
+        _hf_local_cache[model_name] = (model_obj, tokenizer)
+
+    model_obj, tokenizer = _hf_local_cache[model_name]
+
+    chat_kwargs = dict(tokenize=False, add_generation_prompt=True)
+    try:
+        prompt = tokenizer.apply_chat_template(messages, **chat_kwargs, enable_thinking=False)
+    except TypeError:
+        prompt = tokenizer.apply_chat_template(messages, **chat_kwargs)
+
+    inputs = tokenizer(prompt, return_tensors="pt").to(model_obj.device)
+    with torch.no_grad():
+        output_ids = model_obj.generate(
+            **inputs,
+            max_new_tokens=min(max_tokens, 512),
+            do_sample=temperature > 0,
+            temperature=max(temperature, 1e-5),
+            pad_token_id=tokenizer.eos_token_id,
+        )
+
+    generated_ids = output_ids[0][inputs["input_ids"].shape[1]:]
+    return tokenizer.decode(generated_ids, skip_special_tokens=True).strip()
 
 
 def _get_mlx_response(messages, model_id, max_tokens, temperature):
@@ -174,6 +233,19 @@ def get_response_from_llm(
         )
         new_msg_history.append({"role": "assistant", "content": response_text})
         # Convert content→text for MetaGen API compatibility
+        new_msg_history = [
+            {**m, "text": m.pop("content")} if "content" in m else m
+            for m in new_msg_history
+        ]
+        return response_text, new_msg_history, {}
+
+    # ----- Hugging Face local path (Transformers 4-bit on GPU) -----
+    if model.startswith("hf-local/"):
+        response_text = _get_hf_local_response(
+            new_msg_history, model, max_tokens=min(max_tokens, 512),
+            temperature=temperature,
+        )
+        new_msg_history.append({"role": "assistant", "content": response_text})
         new_msg_history = [
             {**m, "text": m.pop("content")} if "content" in m else m
             for m in new_msg_history
